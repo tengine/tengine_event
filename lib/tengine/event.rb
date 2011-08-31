@@ -62,4 +62,16 @@ class Tengine::Event
     @properties = (hash || {}).inject({}){|d, (k,v)| d[k.to_s] = v; d}
   end
 
+  ATTRIBUTE_NAMES = [:key, :event_type_name, :source_name, :occurred_at, :properties].freeze
+
+  # @return [Hash] attributes of this object
+  def attributes
+    ATTRIBUTE_NAMES.inject({}) do |d, attr_name|
+      v = send(attr_name)
+      d[attr_name] = v unless v.blank?
+      d
+    end
+  end
+
+
 end
