@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 require File.expand_path(File.dirname(__FILE__) + '/../spec_helper')
 
 require 'time'
@@ -66,6 +67,28 @@ describe "Tengine::Event" do
     expect{
       Tengine::Event.new(:occurred_at => "2011-08-31 12:00:00 +0900")
     }.to raise_error(ArgumentError, /occurred_at must be a Time but was/)
+  end
+
+  describe :fire do
+    before do
+      Tengine::Event.config = {
+        :connection => {"foo" => "aaa"},
+        :exchange => {'name' => "exchange1", 'type' => 'direct', 'durable' => true},
+        :queue => {'name' => "queue1", 'durable' => true},
+      }
+      @mock_connection = mock(:connection)
+      @mock_channel = mock(:channel)
+      @mock_exchange = mock(:exchange)
+      AMQP.should_receive(:connect).with({:foo => "aaa"}).and_return(@mock_connection)
+      AMQP::Channel.should_receive(:new).with(@mock_connection).and_return(@mock_channel)
+      AMQP::Exchange.should_receive(:new).with(@mock_channel, "direct", "exchange1", :durable => true).and_return(@mock_exchange)
+    end
+
+    it "JSON形式にserializeしてexchangeにpublishする" do
+      @mock_exchange.should_receive(:publish).with(/\{"key":"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}","event_type_name":"foo"\}/) # Tengine::Event#to_json
+      Tengine::Event.fire(:foo)
+    end
+
   end
 
 

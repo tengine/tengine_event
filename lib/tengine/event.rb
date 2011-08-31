@@ -2,10 +2,32 @@
 require 'tengine'
 
 require 'active_support/core_ext/object/blank'
+require 'active_support/json'
 require 'uuid'
 
 # Serializable Class of object to send to an MQ or to receive from MQ.
 class Tengine::Event
+
+  class << self
+    def config; @config ||= {}; end
+    def config=(v); @config = v; end
+    def mq_suite; @mq_suite ||= Tengine::Mq::Suite.new(config); end
+
+    # publish an event message to AMQP exchange
+    # @param [String] event_type_name event_type_name
+    # @param [Hash] options the options for attributes
+    # @option options [String] :key attriute key
+    # @option options [String] :source_name source_name
+    # @option options [Time] :occurred_at occurred_at
+    # @option options [Hash] :properties properties
+    # @return [Tengine::Event]
+    def fire(event_type_name, options = {})
+      event = self.new((options || {}).update(:event_type_name => event_type_name))
+      mq_suite.exchange.publish(event.to_json)
+      event
+    end
+  end
+
 
   # constructor
   # @param [Hash] attrs the options for attributes
@@ -26,7 +48,6 @@ class Tengine::Event
     # http://d.hatena.ne.jp/kiwamu/20090205/1233826235
     @@uuid_gen ||= ::UUID.new
     @key ||= @@uuid_gen.generate # Stringを返す
-    @properties ||= {}
   end
 
   # @attribute
@@ -57,9 +78,16 @@ class Tengine::Event
 
   # @attribute
   # プロパティ。他の属性だけでは表現できない諸属性を格納するHashです。
-  attr_reader :properties
+  def properties
+    @properties ||= {}
+  end
+
   def properties=(hash)
-    @properties = (hash || {}).inject({}){|d, (k,v)| d[k.to_s] = v; d}
+    if hash
+      @properties = (hash || {}).inject({}){|d, (k,v)| d[k.to_s] = v; d}
+    else
+      @properties = nil
+    end
   end
 
   ATTRIBUTE_NAMES = [:key, :event_type_name, :source_name, :occurred_at, :properties].freeze

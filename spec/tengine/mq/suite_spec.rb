@@ -37,6 +37,4 @@ describe "Tengine::Mq::Suite" do
 
   end
 
-
-
 end
