@@ -4,7 +4,17 @@ require 'tengine'
 require 'active_support/core_ext/object/blank'
 require 'uuid'
 
+# Serializable Class of object to send to an MQ or to receive from MQ.
 class Tengine::Event
+
+  # constructor
+  # @param [Hash] attrs the options for attributes
+  # @option attrs [String] :key attriute key
+  # @option attrs [String] :event_type_name event_type_name
+  # @option attrs [String] :source_name source_name
+  # @option attrs [Time] :occurred_at occurred_at
+  # @option attrs [Hash] :properties properties
+  # @return [Tengine::Event]
   def initialize(attrs = nil)
     if attrs
       raise ArgumentError, "attrs must be a Hash but #{attrs.inspect}" unless attrs.is_a?(Hash)
