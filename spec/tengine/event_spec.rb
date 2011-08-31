@@ -9,6 +9,6 @@ describe "Tengine::Event" do
     its(:source_name){ should be_nil }
     its(:occurred_at){ should be_nil }
     its(:properties){ should be_a(Hash) }
-    its(:occurred_at){ should_not be_empty }
+    its(:properties){ should be_empty }
   end
 end
