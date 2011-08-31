@@ -1,5 +1,7 @@
 require File.expand_path(File.dirname(__FILE__) + '/../spec_helper')
 
+require 'time'
+
 describe "Tengine::Event" do
   describe :new_object do
     subject{ Tengine::Event.new }
@@ -27,5 +29,28 @@ describe "Tengine::Event" do
     its(:occurred_at){ should == Time.utc(2011,8,11,12,0) }
     its(:properties){ should == {'bar' => "ABC", 'baz' => 999}}
   end
+
+  describe :local_time_occurred_at do
+    subject{ Tengine::Event.new(
+        :occurred_at => Time.parse("2011-08-31 12:00:00 +0900")
+        )}
+    it{ subject.should be_a(Tengine::Event) }
+    its(:occurred_at){ should == Time.utc(2011,8,31,3,0) }
+    its(:occurred_at){ should be_utc }
+  end
+
+  it :attrs_for_new_must_be_Hash do
+    expect{
+      Tengine::Event.new("{foo: 1, bar: 2}")
+    }.to raise_error(ArgumentError, /attrs must be a Hash but was/)
+  end
+
+
+  it :occurred_at_must_be_Time do
+    expect{
+      Tengine::Event.new(:occurred_at => "2011-08-31 12:00:00 +0900")
+    }.to raise_error(ArgumentError, /occurred_at must be a Time but was/)
+  end
+
 
 end

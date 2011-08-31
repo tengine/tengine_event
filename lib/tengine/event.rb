@@ -17,7 +17,7 @@ class Tengine::Event
   # @return [Tengine::Event]
   def initialize(attrs = nil)
     if attrs
-      raise ArgumentError, "attrs must be a Hash but #{attrs.inspect}" unless attrs.is_a?(Hash)
+      raise ArgumentError, "attrs must be a Hash but was #{attrs.inspect}" unless attrs.is_a?(Hash)
       attrs.each do |key, value|
         send("#{key}=", value)
       end
@@ -46,6 +46,14 @@ class Tengine::Event
   # @attribute
   # イベントの発生日時。
   attr_accessor :occurred_at
+  def occurred_at=(v)
+    if v
+      raise ArgumentError, "occurred_at must be a Time but was #{v.inspect}" unless v.is_a?(Time)
+      @occurred_at = v.utc
+    else
+      @occurred_at = nil
+    end
+  end
 
   # @attribute
   # プロパティ。他の属性だけでは表現できない諸属性を格納するHashです。
