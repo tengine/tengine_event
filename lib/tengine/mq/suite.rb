@@ -1,5 +1,8 @@
 require 'tengine/mq'
 
+require 'active_support/core_ext/hash/keys'
+require 'amqp'
+
 class Tengine::Mq::Suite
 
   attr_reader :config

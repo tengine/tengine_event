@@ -1,5 +1,7 @@
 require File.expand_path(File.dirname(__FILE__) + '/../../spec_helper')
 
+require 'amqp'
+
 describe "Tengine::Mq::Suite" do
 
   context "normal usage" do
@@ -27,7 +29,9 @@ describe "Tengine::Mq::Suite" do
     it "'s queue must be AMQP::Queue" do
       AMQP.should_receive(:connect).with({:foo => "aaa"}).and_return(@mock_connection)
       AMQP::Channel.should_receive(:new).with(@mock_connection).and_return(@mock_channel)
-      AMQP::Queue.should_receive(:new).with(@mock_channel, "queue1", :durable => true)
+      AMQP::Exchange.should_receive(:new).with(@mock_channel, "direct", "exchange1", :durable => true).and_return(@mock_exchange)
+      AMQP::Queue.should_receive(:new).with(@mock_channel, "queue1", :durable => true).and_return(@mock_queue)
+      @mock_queue.should_receive(:bind).with(@mock_exchange)
       subject.queue.should == @mock_queue
     end
 
