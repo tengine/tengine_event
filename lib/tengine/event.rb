@@ -36,6 +36,17 @@ class Tengine::Event
       event
     end
 
+    # jsonの文字列からTengine::Eventのオブジェクトを解釈して生成します
+    def parse(str)
+      case raw_parsed = JSON.parse(str)
+      when Hash then
+        new(raw_parsed)
+      when Array then
+        raw_parsed.map{|hash| new(hash)}
+      else
+      end
+    end
+
     # @attribute
     # host_nameが実行するコマンド。デフォルトでは hostname。
     def host_name_command; @host_name_command ||= "hostname"; end
@@ -108,11 +119,13 @@ class Tengine::Event
   # イベントの発生日時。
   attr_accessor :occurred_at
   def occurred_at=(v)
-    if v
-      raise ArgumentError, "occurred_at must be a Time but was #{v.inspect}" unless v.is_a?(Time)
-      @occurred_at = v.utc
+    case v
+    when nil then @occurred_at = nil
+    when Time then @occurred_at = v.utc
+    when String then
+      @occurred_at = v.respond_to?(:to_time) ? v.to_time : Time.respond_to?(:parse) ? Time.parse(v) : v
     else
-      @occurred_at = nil
+      raise ArgumentError, "occurred_at must be a Time but was #{v.inspect}" unless v.is_a?(Time)
     end
   end
 

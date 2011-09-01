@@ -178,34 +178,17 @@ describe "Tengine::Event" do
   end
 
 
+  describe :occurred_at do
+    context "valid String" do
+      subject{ Tengine::Event.new(:occurred_at => "2011-08-31 12:00:00 +0900") }
+      its(:occurred_at){ should be_a(Time); should == Time.utc(2011, 8, 31, 3)}
+    end
+  end
   it 'occurred_at must be Time' do
     expect{
-      Tengine::Event.new(:occurred_at => "2011-08-31 12:00:00 +0900")
-    }.to raise_error(ArgumentError, /occurred_at must be a Time but was/)
+      Tengine::Event.new(:occurred_at => "invalid time string")
+    }.to raise_error(ArgumentError, /no time information/)
   end
-
-  describe :fire do
-    before do
-      Tengine::Event.config = {
-        :connection => {"foo" => "aaa"},
-        :exchange => {'name' => "exchange1", 'type' => 'direct', 'durable' => true},
-        :queue => {'name' => "queue1", 'durable' => true},
-      }
-      @mock_connection = mock(:connection)
-      @mock_channel = mock(:channel)
-      @mock_exchange = mock(:exchange)
-      AMQP.should_receive(:connect).with({:foo => "aaa"}).and_return(@mock_connection)
-      AMQP::Channel.should_receive(:new).with(@mock_connection).and_return(@mock_channel)
-      AMQP::Exchange.should_receive(:new).with(@mock_channel, "direct", "exchange1", :durable => true).and_return(@mock_exchange)
-    end
-
-    it "JSON形式にserializeしてexchangeにpublishする" do
-      expected_event = Tengine::Event.new(:event_type_name => :foo, :key => "uniq_key")
-      @mock_exchange.should_receive(:publish).with(expected_event.to_json)
-      Tengine::Event.fire(:foo, :key => "uniq_key")
-    end
-  end
-
 
   describe :notification_level do
     {
@@ -231,6 +214,61 @@ describe "Tengine::Event" do
         its(:notification_level_key){ should == level_key.to_sym}
       end
     end
+  end
+
+  describe :fire do
+    before do
+      Tengine::Event.config = {
+        :connection => {"foo" => "aaa"},
+        :exchange => {'name' => "exchange1", 'type' => 'direct', 'durable' => true},
+        :queue => {'name' => "queue1", 'durable' => true},
+      }
+      @mock_connection = mock(:connection)
+      @mock_channel = mock(:channel)
+      @mock_exchange = mock(:exchange)
+      AMQP.should_receive(:connect).with({:foo => "aaa"}).and_return(@mock_connection)
+      AMQP::Channel.should_receive(:new).with(@mock_connection).and_return(@mock_channel)
+      AMQP::Exchange.should_receive(:new).with(@mock_channel, "direct", "exchange1", :durable => true).and_return(@mock_exchange)
+    end
+
+    it "JSON形式にserializeしてexchangeにpublishする" do
+      expected_event = Tengine::Event.new(:event_type_name => :foo, :key => "uniq_key")
+      @mock_exchange.should_receive(:publish).with(expected_event.to_json)
+      Tengine::Event.fire(:foo, :key => "uniq_key")
+    end
+  end
+
+
+  describe :parse do
+    context "can parse valid json object" do
+      subject do
+        source = Tengine::Event.new(
+          :event_type_name => :foo,
+          :key => "hoge",
+          'source_name' => "server1",
+          :occurred_at => Time.utc(2011,8,11,12,0),
+          :notification_level_key => 'error',
+          'sender_name' => "server2",
+          :properties => {:bar => "ABC", :baz => 999}
+          )
+        Tengine::Event.parse(source.to_json)
+      end
+      its(:key){ should == "hoge" }
+      its(:event_type_name){ should == "foo" }
+      its(:source_name){ should == "server1" }
+      its(:occurred_at){ should == Time.utc(2011,8,11,12,0) }
+      its(:notification_level){ should == 4}
+      its(:notification_level_key){ should == :error}
+      its(:sender_name){ should == "server2" }
+      its(:properties){ should == {'bar' => "ABC", 'baz' => 999}}
+    end
+
+    it "raise ArgumentError for invalid attribute name" do
+      expect{
+        Tengine::Event.parse({'name' => :foo}.to_json)
+      }.to raise_error(NoMethodError)
+    end
+
   end
 
 end
