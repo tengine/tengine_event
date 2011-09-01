@@ -13,6 +13,7 @@ describe "Tengine::Event" do
     its(:occurred_at){ should be_nil }
     its(:notification_level){ should == 2}
     its(:notification_level_key){ should == :info}
+    its(:sender_name){ should be_nil }
     its(:properties){ should be_a(Hash) }
     its(:properties){ should be_empty }
     it {
@@ -40,6 +41,7 @@ describe "Tengine::Event" do
         'source_name' => "server1",
         :occurred_at => Time.utc(2011,8,11,12,0),
         :notification_level_key => 'error',
+        'sender_name' => "server2",
         :properties => {:bar => "ABC", :baz => 999}
         )}
     it{ subject.should be_a(Tengine::Event) }
@@ -49,6 +51,7 @@ describe "Tengine::Event" do
     its(:occurred_at){ should == Time.utc(2011,8,11,12,0) }
     its(:notification_level){ should == 4}
     its(:notification_level_key){ should == :error}
+    its(:sender_name){ should == "server2" }
     its(:properties){ should == {'bar' => "ABC", 'baz' => 999}}
     it {
       attrs = subject.attributes
@@ -58,6 +61,7 @@ describe "Tengine::Event" do
         :source_name => "server1",
         :occurred_at => Time.utc(2011,8,11,12,0),
         :notification_level => 4,
+        :sender_name => "server2",
         :properties => {'bar' => "ABC", 'baz' => 999}
       }
     }
@@ -70,6 +74,7 @@ describe "Tengine::Event" do
         'key' => "hoge",
         'source_name' => "server1",
         'occurred_at' => "2011-08-11T12:00:00Z", # Timeオブジェクトは文字列に変換されます
+        'sender_name' => "server2",
         'properties' => {'bar' => "ABC", 'baz' => 999}
       }
     }

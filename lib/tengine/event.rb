@@ -64,7 +64,7 @@ class Tengine::Event
   def event_type_name=(v); @event_type_name = v.nil? ? nil : v.to_s; end
 
   # @attribute
-  # イベントの発生源の識別名。
+  # イベントの発生源名。
   attr_reader :source_name
   def source_name=(v); @source_name = v.nil? ? nil : v.to_s; end
 
@@ -103,6 +103,11 @@ class Tengine::Event
   def notification_level_key; NOTIFICATION_LEVELS[notification_level];end
   def notification_level_key=(v); self.notification_level = NOTIFICATION_LEVELS_INV[v.to_sym]; end
 
+  # @attribute
+  # イベントの送信者名。
+  attr_reader :sender_name
+  def sender_name=(v); @sender_name = v.nil? ? nil : v.to_s; end
+
 
   # @attribute
   # プロパティ。他の属性だけでは表現できない諸属性を格納するHashです。
@@ -118,7 +123,7 @@ class Tengine::Event
     end
   end
 
-  ATTRIBUTE_NAMES = [:event_type_name, :key, :source_name, :occurred_at, :notification_level, :properties].freeze
+  ATTRIBUTE_NAMES = [:event_type_name, :key, :source_name, :occurred_at, :notification_level, :sender_name, :properties].freeze
 
   # @return [Hash] attributes of this object
   def attributes
@@ -128,6 +133,5 @@ class Tengine::Event
       d
     end
   end
-
 
 end
