@@ -19,7 +19,9 @@ describe "Tengine::Event" do
       attrs = subject.attributes
       attrs.should be_a(Hash)
       attrs.delete(:key).should_not be_nil
-      attrs.should == {}
+      attrs.should == {
+        :notification_level=>2
+      }
     }
     it {
       hash = JSON.parse(subject.to_json)
@@ -55,6 +57,7 @@ describe "Tengine::Event" do
         :key => "hoge",
         :source_name => "server1",
         :occurred_at => Time.utc(2011,8,11,12,0),
+        :notification_level => 4,
         :properties => {'bar' => "ABC", 'baz' => 999}
       }
     }

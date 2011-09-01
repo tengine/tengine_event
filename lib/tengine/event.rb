@@ -118,7 +118,7 @@ class Tengine::Event
     end
   end
 
-  ATTRIBUTE_NAMES = [:key, :event_type_name, :source_name, :occurred_at, :properties].freeze
+  ATTRIBUTE_NAMES = [:event_type_name, :key, :source_name, :occurred_at, :notification_level, :properties].freeze
 
   # @return [Hash] attributes of this object
   def attributes
