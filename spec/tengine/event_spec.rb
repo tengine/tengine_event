@@ -47,7 +47,7 @@ describe "Tengine::Event" do
     }
   end
 
-  describe :local_time_occurred_at do
+  describe 'occurred_at with local_time should convert to UTC' do
     subject{ Tengine::Event.new(
         :occurred_at => Time.parse("2011-08-31 12:00:00 +0900")
         )}
@@ -56,14 +56,14 @@ describe "Tengine::Event" do
     its(:occurred_at){ should be_utc }
   end
 
-  it :attrs_for_new_must_be_Hash do
+  it 'attrs_for_new must be Hash' do
     expect{
       Tengine::Event.new("{foo: 1, bar: 2}")
     }.to raise_error(ArgumentError, /attrs must be a Hash but was/)
   end
 
 
-  it :occurred_at_must_be_Time do
+  it 'occurred_at must be Time' do
     expect{
       Tengine::Event.new(:occurred_at => "2011-08-31 12:00:00 +0900")
     }.to raise_error(ArgumentError, /occurred_at must be a Time but was/)
