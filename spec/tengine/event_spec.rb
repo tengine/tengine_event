@@ -4,34 +4,104 @@ require File.expand_path(File.dirname(__FILE__) + '/../spec_helper')
 require 'time'
 
 describe "Tengine::Event" do
+  expected_host_name = "this_server1"
+
+  before do
+    Tengine::Event.stub!(:host_name).and_return(expected_host_name)
+  end
+
   describe :new_object do
-    subject{ Tengine::Event.new }
-    it{ subject.should be_a(Tengine::Event) }
-    its(:key){ should =~ /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/ }
-    its(:event_type_name){ should be_nil }
-    its(:source_name){ should be_nil }
-    its(:occurred_at){ should be_nil }
-    its(:notification_level){ should == 2}
-    its(:notification_level_key){ should == :info}
-    its(:sender_name){ should be_nil }
-    its(:properties){ should be_a(Hash) }
-    its(:properties){ should be_empty }
-    it {
-      attrs = subject.attributes
-      attrs.should be_a(Hash)
-      attrs.delete(:key).should_not be_nil
-      attrs.should == {
-        :notification_level=>2
+    context "without config" do
+      before do
+        Tengine::Event.config = {}
+      end
+
+      it{ Tengine::Event.default_source_name.should == expected_host_name }
+      it{ Tengine::Event.default_sender_name.should == expected_host_name }
+      it{ Tengine::Event.default_notification_level.should == 2 }
+
+      subject{ Tengine::Event.new }
+      it{ subject.should be_a(Tengine::Event) }
+      its(:key){ should =~ /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/ }
+      its(:event_type_name){ should be_nil }
+      its(:source_name){ should == expected_host_name}
+      its(:occurred_at){ should be_nil }
+      its(:notification_level){ should == 2}
+      its(:notification_level_key){ should == :info}
+      its(:sender_name){ should == expected_host_name }
+      its(:properties){ should be_a(Hash) }
+      its(:properties){ should be_empty }
+      it {
+        attrs = subject.attributes
+        attrs.should be_a(Hash)
+        attrs.delete(:key).should_not be_nil
+        attrs.should == {
+          :notification_level=>2,
+          :source_name => expected_host_name,
+          :sender_name => expected_host_name,
+        }
       }
-    }
-    it {
-      hash = JSON.parse(subject.to_json)
-      hash.should be_a(Hash)
-      hash.delete('key').should =~ /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/
-      hash.should == {
-        "notification_level"=>2
+      it {
+        hash = JSON.parse(subject.to_json)
+        hash.should be_a(Hash)
+        hash.delete('key').should =~ /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/
+        hash.should == {
+          "notification_level" => 2,
+          'source_name' => expected_host_name,
+          'sender_name' => expected_host_name,
+        }
       }
-    }
+    end
+
+    context "with config" do
+      before do
+        Tengine::Event.config = {
+          :default_source_name => "event_source1",
+          :default_sender_name => "sender1",
+          :default_notification_level_key => :warn
+        }
+      end
+      after do
+        Tengine::Event.config = {}
+      end
+
+      it{ Tengine::Event.default_source_name.should == "event_source1" }
+      it{ Tengine::Event.default_sender_name.should == "sender1" }
+      it{ Tengine::Event.default_notification_level.should == 3 }
+
+      subject{ Tengine::Event.new }
+      it{ subject.should be_a(Tengine::Event) }
+      its(:key){ should =~ /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/ }
+      its(:event_type_name){ should be_nil }
+      its(:source_name){ should == "event_source1"}
+      its(:occurred_at){ should be_nil }
+      its(:notification_level){ should == 3}
+      its(:notification_level_key){ should == :warn}
+      its(:sender_name){ should == "sender1" }
+      its(:properties){ should be_a(Hash) }
+      its(:properties){ should be_empty }
+      it {
+        attrs = subject.attributes
+        attrs.should be_a(Hash)
+        attrs.delete(:key).should_not be_nil
+        attrs.should == {
+          :notification_level=>3,
+          :source_name => "event_source1",
+          :sender_name => "sender1",
+        }
+      }
+      it {
+        hash = JSON.parse(subject.to_json)
+        hash.should be_a(Hash)
+        hash.delete('key').should =~ /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/
+        hash.should == {
+          'notification_level'=>3,
+          'source_name' => "event_source1",
+          'sender_name' => "sender1",
+        }
+      }
+    end
+
   end
 
   describe :new_object_with_attrs do
@@ -95,6 +165,8 @@ describe "Tengine::Event" do
         "notification_level"=>2,
         'key' => "hoge",
         'occurred_at' => "2011-08-31T03:00:00Z", # Timeオブジェクトは文字列に変換されます
+        'source_name' => "this_server1",
+        'sender_name' => "this_server1",
       }
     }
   end
