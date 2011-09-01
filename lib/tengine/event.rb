@@ -25,6 +25,9 @@ class Tengine::Event
     # @option options [String] :key attriute key
     # @option options [String] :source_name source_name
     # @option options [Time] :occurred_at occurred_at
+    # @option options [Integer] :notification_level notification_level
+    # @option options [Symbol] :notification_level_key notification_level_key
+    # @option options [String] :sender_name sender_name
     # @option options [Hash] :properties properties
     # @return [Tengine::Event]
     def fire(event_type_name, options = {})
@@ -41,6 +44,9 @@ class Tengine::Event
   # @option attrs [String] :event_type_name event_type_name
   # @option attrs [String] :source_name source_name
   # @option attrs [Time] :occurred_at occurred_at
+  # @option attrs [Integer] :notification_level notification_level
+  # @option attrs [Symbol] :notification_level_key notification_level_key
+  # @option attrs [String] :sender_name sender_name
   # @option attrs [Hash] :properties properties
   # @return [Tengine::Event]
   def initialize(attrs = nil)
