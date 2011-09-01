@@ -13,6 +13,12 @@ class Tengine::Event
     def config=(v); @config = v; end
     def mq_suite; @mq_suite ||= Tengine::Mq::Suite.new(config); end
 
+    def uuid_gen
+      # uuidtools と uuid のどちらが良いかは以下のサイトを参照して uuid を使うようにしました。
+      # http://d.hatena.ne.jp/kiwamu/20090205/1233826235
+      @uuid_gen ||= ::UUID.new
+    end
+
     # publish an event message to AMQP exchange
     # @param [String] event_type_name event_type_name
     # @param [Hash] options the options for attributes
@@ -44,10 +50,8 @@ class Tengine::Event
         send("#{key}=", value)
       end
     end
-    # uuidtools と uuid のどちらが良いかは以下のサイトを参照して uuid を使うようにしました。
-    # http://d.hatena.ne.jp/kiwamu/20090205/1233826235
-    @@uuid_gen ||= ::UUID.new
-    @key ||= @@uuid_gen.generate # Stringを返す
+    @key ||= self.class.uuid_gen.generate # Stringを返す
+    @notification_level ||= NOTIFICATION_LEVELS_INV[:info]
   end
 
   # @attribute
@@ -75,6 +79,30 @@ class Tengine::Event
       @occurred_at = nil
     end
   end
+
+  # from notification_level to notification_level_key
+  NOTIFICATION_LEVELS = {
+      0 => :gr_heartbeat,
+      1 => :debug,
+      2 => :info,
+      3 => :warn,
+      4 => :error,
+      5 => :fatal,
+  }.freeze
+
+  # from notification_level_key to notification_level
+  NOTIFICATION_LEVELS_INV = NOTIFICATION_LEVELS.invert.freeze
+
+  # @attribute
+  # イベントの通知レベル
+  attr_accessor :notification_level
+
+  # @attribute
+  # イベントの通知レベルキー
+  # :gr_heartbeat/:debug/:info/:warn/:error/:fatal
+  def notification_level_key; NOTIFICATION_LEVELS[notification_level];end
+  def notification_level_key=(v); self.notification_level = NOTIFICATION_LEVELS_INV[v.to_sym]; end
+
 
   # @attribute
   # プロパティ。他の属性だけでは表現できない諸属性を格納するHashです。

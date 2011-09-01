@@ -7,10 +7,12 @@ describe "Tengine::Event" do
   describe :new_object do
     subject{ Tengine::Event.new }
     it{ subject.should be_a(Tengine::Event) }
-    its(:key){ should_not be_blank }
+    its(:key){ should =~ /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/ }
     its(:event_type_name){ should be_nil }
     its(:source_name){ should be_nil }
     its(:occurred_at){ should be_nil }
+    its(:notification_level){ should == 2}
+    its(:notification_level_key){ should == :info}
     its(:properties){ should be_a(Hash) }
     its(:properties){ should be_empty }
     it {
@@ -27,6 +29,7 @@ describe "Tengine::Event" do
         :key => "hoge",
         'source_name' => "server1",
         :occurred_at => Time.utc(2011,8,11,12,0),
+        :notification_level_key => 'error',
         :properties => {:bar => "ABC", :baz => 999}
         )}
     it{ subject.should be_a(Tengine::Event) }
@@ -34,6 +37,8 @@ describe "Tengine::Event" do
     its(:event_type_name){ should == "foo" }
     its(:source_name){ should == "server1" }
     its(:occurred_at){ should == Time.utc(2011,8,11,12,0) }
+    its(:notification_level){ should == 4}
+    its(:notification_level_key){ should == :error}
     its(:properties){ should == {'bar' => "ABC", 'baz' => 999}}
     it {
       attrs = subject.attributes
@@ -85,11 +90,37 @@ describe "Tengine::Event" do
     end
 
     it "JSON形式にserializeしてexchangeにpublishする" do
-      @mock_exchange.should_receive(:publish).with(/\{"key":"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}","event_type_name":"foo"\}/) # Tengine::Event#to_json
-      Tengine::Event.fire(:foo)
+      expected_event = Tengine::Event.new(:event_type_name => :foo, :key => "uniq_key")
+      @mock_exchange.should_receive(:publish).with(expected_event.to_json)
+      Tengine::Event.fire(:foo, :key => "uniq_key")
     end
-
   end
 
+
+  describe :notification_level do
+    {
+      0 => :gr_heartbeat,
+      1 => :debug,
+      2 => :info,
+      3 => :warn,
+      4 => :error,
+      5 => :fatal,
+    }.each do |level, level_key|
+      context "set by notification_level" do
+        subject{ Tengine::Event.new(:notification_level => level) }
+        its(:notification_level_key){ should == level_key}
+      end
+      context "set Symbol by notification_level_key" do
+        subject{ Tengine::Event.new(:notification_level_key => level_key.to_sym) }
+        its(:notification_level){ should == level}
+        its(:notification_level_key){ should == level_key.to_sym}
+      end
+      context "set String by notification_level_key" do
+        subject{ Tengine::Event.new(:notification_level_key => level_key.to_s) }
+        its(:notification_level){ should == level}
+        its(:notification_level_key){ should == level_key.to_sym}
+      end
+    end
+  end
 
 end
