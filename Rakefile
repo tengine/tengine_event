@@ -17,8 +17,8 @@ Jeweler::Tasks.new do |gem|
   gem.name = "tengine_event"
   gem.homepage = "http://github.com/akm/tengine_event"
   gem.license = "MIT"
-  gem.summary = %Q{TODO: one-line summary of your gem}
-  gem.description = %Q{TODO: longer description of your gem}
+  gem.summary = %Q{Tengine Event API to access the queue}
+  gem.description = %Q{Tengine Event API to access the queue}
   gem.email = "akm2000@gmail.com"
   gem.authors = ["akimatter"]
   # dependencies defined in Gemfile
