@@ -21,6 +21,14 @@ describe "Tengine::Event" do
       attrs.delete(:key).should_not be_nil
       attrs.should == {}
     }
+    it {
+      hash = JSON.parse(subject.to_json)
+      hash.should be_a(Hash)
+      hash.delete('key').should =~ /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/
+      hash.should == {
+        "notification_level"=>2
+      }
+    }
   end
 
   describe :new_object_with_attrs do
@@ -50,15 +58,37 @@ describe "Tengine::Event" do
         :properties => {'bar' => "ABC", 'baz' => 999}
       }
     }
+    it {
+      hash = JSON.parse(subject.to_json)
+      hash.should be_a(Hash)
+      hash.should == {
+        "notification_level"=>4,
+        'event_type_name' => 'foo',
+        'key' => "hoge",
+        'source_name' => "server1",
+        'occurred_at' => "2011-08-11T12:00:00Z", # Timeオブジェクトは文字列に変換されます
+        'properties' => {'bar' => "ABC", 'baz' => 999}
+      }
+    }
   end
 
   describe 'occurred_at with local_time should convert to UTC' do
     subject{ Tengine::Event.new(
-        :occurred_at => Time.parse("2011-08-31 12:00:00 +0900")
+        :occurred_at => Time.parse("2011-08-31 12:00:00 +0900"),
+        :key => 'hoge'
         )}
     it{ subject.should be_a(Tengine::Event) }
     its(:occurred_at){ should == Time.utc(2011,8,31,3,0) }
     its(:occurred_at){ should be_utc }
+    it {
+      hash = JSON.parse(subject.to_json)
+      hash.should be_a(Hash)
+      hash.should == {
+        "notification_level"=>2,
+        'key' => "hoge",
+        'occurred_at' => "2011-08-31T03:00:00Z", # Timeオブジェクトは文字列に変換されます
+      }
+    }
   end
 
   it 'attrs_for_new must be Hash' do
