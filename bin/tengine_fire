@@ -1,0 +1,60 @@
+#!/usr/bin/env ruby
+# encoding: utf-8
+
+require 'eventmachine'
+
+__DIR__ = File.dirname(__FILE__)
+$LOAD_PATH << File.expand_path('../lib', __DIR__)
+require 'tengine/event'
+
+if ARGV.empty? || ARGV.include?("-h") || ARGV.include?("--help")
+  puts "#{__FILE__} <event_type_name> [opt1:foo]..."
+  exit
+end
+
+event_type_name = ARGV.shift
+options = ARGV.inject({}) do |d, arg|
+  key, value = *arg.split(/:/, 2)
+  d[key] = value
+  d
+end
+
+Tengine::Event.config = YAML.load(<<EOS)
+connection:
+  user: 'guest'
+  pass: 'guest'
+  vhost: '/'
+  # timeout: nil
+  logging: false
+  insist: false
+  host: 'localhost'
+  port: 5672
+exchange:
+  name: "notification_exchange"
+  type: fanout
+  passive: false
+  durable: true
+  auto_delete: false
+  internal: false
+  nowait: true
+queue:
+  name: "event_queue"
+  passive: false
+  durable: true
+  auto_delete: false
+  exclusive: false
+  nowait: true
+  subscribe:
+    ack: true
+    nowait: true
+    confirm: nil
+EOS
+
+EM.run do
+  EM.next_tick do
+    Tengine::Event.fire(event_type_name, options)
+    EM.add_timer(1) {
+      Tengine::Event.mq_suite.connection.close { EM.stop }
+    }
+  end
+end

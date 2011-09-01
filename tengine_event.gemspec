@@ -5,13 +5,14 @@
 
 Gem::Specification.new do |s|
   s.name = %q{tengine_event}
-  s.version = "0.0.3"
+  s.version = "0.1.0"
 
   s.required_rubygems_version = Gem::Requirement.new(">= 0") if s.respond_to? :required_rubygems_version=
   s.authors = [%q{akimatter}]
   s.date = %q{2011-09-01}
   s.description = %q{Tengine Event API to access the queue}
   s.email = %q{akm2000@gmail.com}
+  s.executables = [%q{tengine_fire}]
   s.extra_rdoc_files = [
     "LICENSE.txt",
     "README.rdoc"
@@ -25,6 +26,7 @@ Gem::Specification.new do |s|
     "README.rdoc",
     "Rakefile",
     "VERSION",
+    "bin/tengine_fire",
     "lib/tengine.rb",
     "lib/tengine/event.rb",
     "lib/tengine/mq.rb",
@@ -52,7 +54,8 @@ Gem::Specification.new do |s|
       s.add_development_dependency(%q<yard>, ["~> 0.6.0"])
       s.add_development_dependency(%q<bundler>, ["~> 1.0.0"])
       s.add_development_dependency(%q<jeweler>, ["~> 1.6.4"])
-      s.add_development_dependency(%q<rcov>, [">= 0"])
+      s.add_development_dependency(%q<simplecov>, ["~> 0.4"])
+      s.add_development_dependency(%q<ZenTest>, ["~> 4.4"])
     else
       s.add_dependency(%q<activesupport>, [">= 3.0.0"])
       s.add_dependency(%q<uuid>, ["~> 2.3"])
@@ -61,7 +64,8 @@ Gem::Specification.new do |s|
       s.add_dependency(%q<yard>, ["~> 0.6.0"])
       s.add_dependency(%q<bundler>, ["~> 1.0.0"])
       s.add_dependency(%q<jeweler>, ["~> 1.6.4"])
-      s.add_dependency(%q<rcov>, [">= 0"])
+      s.add_dependency(%q<simplecov>, ["~> 0.4"])
+      s.add_dependency(%q<ZenTest>, ["~> 4.4"])
     end
   else
     s.add_dependency(%q<activesupport>, [">= 3.0.0"])
@@ -71,7 +75,8 @@ Gem::Specification.new do |s|
     s.add_dependency(%q<yard>, ["~> 0.6.0"])
     s.add_dependency(%q<bundler>, ["~> 1.0.0"])
     s.add_dependency(%q<jeweler>, ["~> 1.6.4"])
-    s.add_dependency(%q<rcov>, [">= 0"])
+    s.add_dependency(%q<simplecov>, ["~> 0.4"])
+    s.add_dependency(%q<ZenTest>, ["~> 4.4"])
   end
 end
 

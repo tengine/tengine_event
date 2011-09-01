@@ -21,6 +21,8 @@ Jeweler::Tasks.new do |gem|
   gem.description = %Q{Tengine Event API to access the queue}
   gem.email = "akm2000@gmail.com"
   gem.authors = ["akimatter"]
+  gem.bindir = 'bin'
+  gem.executables = ['tengine_fire']
   # dependencies defined in Gemfile
 end
 Jeweler::RubygemsDotOrgTasks.new
