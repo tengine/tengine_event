@@ -7,7 +7,7 @@ gem "activesupport", ">= 3.0.0"
 
 gem "uuid", "~> 2.3"
 
-gem "amqp", "~> 0.7"
+gem "amqp", "~> 0.8"
 
 # Add dependencies to develop your gem here.
 # Include everything needed to run rake, tests, features, etc.

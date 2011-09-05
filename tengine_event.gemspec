@@ -5,11 +5,11 @@
 
 Gem::Specification.new do |s|
   s.name = %q{tengine_event}
-  s.version = "0.1.0"
+  s.version = "0.1.1"
 
   s.required_rubygems_version = Gem::Requirement.new(">= 0") if s.respond_to? :required_rubygems_version=
   s.authors = [%q{akimatter}]
-  s.date = %q{2011-09-01}
+  s.date = %q{2011-09-05}
   s.description = %q{Tengine Event API to access the queue}
   s.email = %q{akm2000@gmail.com}
   s.executables = [%q{tengine_fire}]
@@ -49,7 +49,7 @@ Gem::Specification.new do |s|
     if Gem::Version.new(Gem::VERSION) >= Gem::Version.new('1.2.0') then
       s.add_runtime_dependency(%q<activesupport>, [">= 3.0.0"])
       s.add_runtime_dependency(%q<uuid>, ["~> 2.3"])
-      s.add_runtime_dependency(%q<amqp>, ["~> 0.7"])
+      s.add_runtime_dependency(%q<amqp>, ["~> 0.8"])
       s.add_development_dependency(%q<rspec>, ["~> 2.3.0"])
       s.add_development_dependency(%q<yard>, ["~> 0.6.0"])
       s.add_development_dependency(%q<bundler>, ["~> 1.0.0"])
@@ -59,7 +59,7 @@ Gem::Specification.new do |s|
     else
       s.add_dependency(%q<activesupport>, [">= 3.0.0"])
       s.add_dependency(%q<uuid>, ["~> 2.3"])
-      s.add_dependency(%q<amqp>, ["~> 0.7"])
+      s.add_dependency(%q<amqp>, ["~> 0.8"])
       s.add_dependency(%q<rspec>, ["~> 2.3.0"])
       s.add_dependency(%q<yard>, ["~> 0.6.0"])
       s.add_dependency(%q<bundler>, ["~> 1.0.0"])
@@ -70,7 +70,7 @@ Gem::Specification.new do |s|
   else
     s.add_dependency(%q<activesupport>, [">= 3.0.0"])
     s.add_dependency(%q<uuid>, ["~> 2.3"])
-    s.add_dependency(%q<amqp>, ["~> 0.7"])
+    s.add_dependency(%q<amqp>, ["~> 0.8"])
     s.add_dependency(%q<rspec>, ["~> 2.3.0"])
     s.add_dependency(%q<yard>, ["~> 0.6.0"])
     s.add_dependency(%q<bundler>, ["~> 1.0.0"])
