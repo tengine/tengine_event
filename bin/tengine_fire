@@ -30,15 +30,15 @@ connection:
   host: 'localhost'
   port: 5672
 exchange:
-  name: "notification_exchange"
-  type: fanout
+  name: "tengine_event_exchange"
+  type: direct
   passive: false
   durable: true
   auto_delete: false
   internal: false
   nowait: true
 queue:
-  name: "event_queue"
+  name: "tengine_event_queue"
   passive: false
   durable: true
   auto_delete: false

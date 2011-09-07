@@ -227,7 +227,7 @@ describe "Tengine::Event" do
       @mock_channel = mock(:channel)
       @mock_exchange = mock(:exchange)
       AMQP.should_receive(:connect).with({:foo => "aaa"}).and_return(@mock_connection)
-      AMQP::Channel.should_receive(:new).with(@mock_connection).and_return(@mock_channel)
+      AMQP::Channel.should_receive(:new).with(@mock_connection, :prefetch => 1).and_return(@mock_channel)
       AMQP::Exchange.should_receive(:new).with(@mock_channel, "direct", "exchange1", :durable => true).and_return(@mock_exchange)
     end
 

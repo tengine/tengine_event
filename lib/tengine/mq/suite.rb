@@ -16,7 +16,7 @@ class Tengine::Mq::Suite
   end
 
   def channel
-    @channel ||= AMQP::Channel.new(connection)
+    @channel ||= AMQP::Channel.new(connection, :prefetch => 1)
   end
 
   def exchange
