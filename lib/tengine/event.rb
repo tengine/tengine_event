@@ -30,9 +30,13 @@ class Tengine::Event
     # @option options [String] :sender_name sender_name
     # @option options [Hash] :properties properties
     # @return [Tengine::Event]
-    def fire(event_type_name, options = {})
+    def fire(event_type_name, options = {}, &block)
       event = self.new((options || {}).update(:event_type_name => event_type_name))
-      mq_suite.exchange.publish(event.to_json)
+      mq_suite.exchange.publish(event.to_json) do
+        # ここで渡される block としては、以下のように mq の connection クローズ と eventmachine の停止が考えられる
+        # mq.connection.disconnect { EM.stop }
+        yield if block_given?
+      end
       event
     end
 
