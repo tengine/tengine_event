@@ -5,11 +5,11 @@
 
 Gem::Specification.new do |s|
   s.name = "tengine_event"
-  s.version = "0.1.2"
+  s.version = "0.1.3"
 
   s.required_rubygems_version = Gem::Requirement.new(">= 0") if s.respond_to? :required_rubygems_version=
   s.authors = ["akimatter"]
-  s.date = "2011-09-07"
+  s.date = "2011-09-08"
   s.description = "Tengine Event API to access the queue"
   s.email = "akm2000@gmail.com"
   s.executables = ["tengine_fire"]
