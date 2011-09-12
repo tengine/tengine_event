@@ -5,10 +5,11 @@ require 'amqp'
 require 'time'
 
 describe "Tengine::Event" do
-  expected_host_name = "this_server1"
+  expected_source_name = "this_server1/12345"
 
   before do
-    Tengine::Event.stub!(:host_name).and_return(expected_host_name)
+    Tengine::Event.stub!(:host_name).and_return("this_server1")
+    Process.stub!(:pid).and_return(12345)
   end
 
   describe :new_object do
@@ -17,19 +18,19 @@ describe "Tengine::Event" do
         Tengine::Event.config = {}
       end
 
-      it{ Tengine::Event.default_source_name.should == expected_host_name }
-      it{ Tengine::Event.default_sender_name.should == expected_host_name }
+      it{ Tengine::Event.default_source_name.should == expected_source_name }
+      it{ Tengine::Event.default_sender_name.should == expected_source_name }
       it{ Tengine::Event.default_level.should == 2 }
 
       subject{ Tengine::Event.new }
       it{ subject.should be_a(Tengine::Event) }
       its(:key){ should =~ /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/ }
       its(:event_type_name){ should be_nil }
-      its(:source_name){ should == expected_host_name}
+      its(:source_name){ should == expected_source_name}
       its(:occurred_at){ should be_nil }
       its(:level){ should == 2}
       its(:level_key){ should == :info}
-      its(:sender_name){ should == expected_host_name }
+      its(:sender_name){ should == expected_source_name }
       its(:properties){ should be_a(Hash) }
       its(:properties){ should be_empty }
       it {
@@ -38,8 +39,8 @@ describe "Tengine::Event" do
         attrs.delete(:key).should_not be_nil
         attrs.should == {
           :level=>2,
-          :source_name => expected_host_name,
-          :sender_name => expected_host_name,
+          :source_name => expected_source_name,
+          :sender_name => expected_source_name,
         }
       }
       it {
@@ -48,8 +49,8 @@ describe "Tengine::Event" do
         hash.delete('key').should =~ /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/
         hash.should == {
           "level" => 2,
-          'source_name' => expected_host_name,
-          'sender_name' => expected_host_name,
+          'source_name' => expected_source_name,
+          'sender_name' => expected_source_name,
         }
       }
     end
@@ -166,8 +167,8 @@ describe "Tengine::Event" do
         "level"=>2,
         'key' => "hoge",
         'occurred_at' => "2011-08-31T03:00:00Z", # Timeオブジェクトは文字列に変換されます
-        'source_name' => "this_server1",
-        'sender_name' => "this_server1",
+        'source_name' => "this_server1/12345",
+        'sender_name' => "this_server1/12345",
       }
     }
   end

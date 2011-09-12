@@ -58,11 +58,11 @@ class Tengine::Event
 
     # source_nameが指定されていない場合に設定される文字列を返します
     # config[:default_source_name] に値が設定されていなかったらhost_nameの値が使用されます
-    def default_source_name; config[:default_source_name] || host_name; end
+    def default_source_name; config[:default_source_name] || "#{host_name}/#{Process.pid}"; end
 
     # sender_nameが指定されていない場合に設定される文字列を返します
     # config[:default_sender_name] に値が設定されていなかったらhost_nameの値が使用されます
-    def default_sender_name; config[:default_sender_name] || host_name; end
+    def default_sender_name; config[:default_sender_name] || "#{host_name}/#{Process.pid}"; end
 
     # levelが指定されていない場合に設定される文字列を返します
     # config[:default_level] に値が設定されていなかったらhost_nameの値が使用されます
@@ -70,7 +70,6 @@ class Tengine::Event
       LEVELS_INV[(config[:default_level_key] || :info).to_sym]
     end
   end
-
 
   # constructor
   # @param [Hash] attrs the options for attributes
