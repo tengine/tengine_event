@@ -8,38 +8,29 @@ require 'uuid'
 # Serializable Class of object to send to an MQ or to receive from MQ.
 class Tengine::Event
 
+  autoload :Sender, 'tengine/event/sender'
+
   class << self
+    # see Tengine::Event::Sender#fire
+    def fire(*args, &block)
+      default_sender.fire(*args, &block)
+    end
+
     def config; @config ||= {}; end
     def config=(v); @config = v; end
 
     attr_writer :mq_suite
     def mq_suite; @mq_suite ||= Tengine::Mq::Suite.new(config); end
 
+    attr_writer :default_sender
+    def default_sender
+      @default_sender ||= Tengine::Event::Sender.new(mq_suite)
+    end
+
     def uuid_gen
       # uuidtools と uuid のどちらが良いかは以下のサイトを参照して uuid を使うようにしました。
       # http://d.hatena.ne.jp/kiwamu/20090205/1233826235
       @uuid_gen ||= ::UUID.new
-    end
-
-    # publish an event message to AMQP exchange
-    # @param [String] event_type_name event_type_name
-    # @param [Hash] options the options for attributes
-    # @option options [String] :key attriute key
-    # @option options [String] :source_name source_name
-    # @option options [Time] :occurred_at occurred_at
-    # @option options [Integer] :level level
-    # @option options [Symbol] :level_key level_key
-    # @option options [String] :sender_name sender_name
-    # @option options [Hash] :properties properties
-    # @return [Tengine::Event]
-    def fire(event_type_name, options = {}, &block)
-      event = self.new((options || {}).update(:event_type_name => event_type_name))
-      mq_suite.exchange.publish(event.to_json) do
-        # ここで渡される block としては、以下のように mq の connection クローズ と eventmachine の停止が考えられる
-        # mq.connection.disconnect { EM.stop }
-        yield if block_given?
-      end
-      event
     end
 
     # jsonの文字列からTengine::Eventのオブジェクトを解釈して生成します
@@ -57,7 +48,6 @@ class Tengine::Event
     # host_nameが実行するコマンド。デフォルトでは hostname。
     def host_name_command; @host_name_command ||= "hostname"; end
     attr_writer :host_name_command
-
 
     # ホスト名を取得する
     # 内部ではhost_name_commandで指定されたコマンドを実行しています。
