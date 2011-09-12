@@ -5,7 +5,7 @@
 
 Gem::Specification.new do |s|
   s.name = %q{tengine_event}
-  s.version = "0.2.1"
+  s.version = "0.2.2"
 
   s.required_rubygems_version = Gem::Requirement.new(">= 0") if s.respond_to? :required_rubygems_version=
   s.authors = [%q{akimatter}]
@@ -29,10 +29,12 @@ Gem::Specification.new do |s|
     "bin/tengine_fire",
     "lib/tengine.rb",
     "lib/tengine/event.rb",
+    "lib/tengine/event/sender.rb",
     "lib/tengine/mq.rb",
     "lib/tengine/mq/suite.rb",
     "lib/tengine_event.rb",
     "spec/spec_helper.rb",
+    "spec/tengine/event/sender_spec.rb",
     "spec/tengine/event_spec.rb",
     "spec/tengine/mq/suite_spec.rb",
     "tengine_event.gemspec"
