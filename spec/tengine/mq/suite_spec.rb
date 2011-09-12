@@ -20,17 +20,23 @@ describe "Tengine::Mq::Suite" do
     subject{ Tengine::Mq::Suite.new(@config) }
 
     it "'s exchange must be AMQP::Exchange" do
-      AMQP.should_receive(:connect).with({:foo => "aaa"}).and_return(@mock_connection)
+      AMQP.should_receive(:connect).with({:user=>"guest", :pass=>"guest", :vhost=>"/",
+          :logging=>false, :insist=>false, :host=>"localhost", :port=>5672, :foo => "aaa"}).and_return(@mock_connection)
       AMQP::Channel.should_receive(:new).with(@mock_connection, :prefetch => 1).and_return(@mock_channel)
-      AMQP::Exchange.should_receive(:new).with(@mock_channel, "direct", "exchange1", :durable => true).and_return(@mock_exchange)
+      AMQP::Exchange.should_receive(:new).with(@mock_channel, "direct", "exchange1",
+        :passive=>false, :durable=>true, :auto_delete=>false, :internal=>false, :nowait=>true).and_return(@mock_exchange)
       subject.exchange.should == @mock_exchange
     end
 
     it "'s queue must be AMQP::Queue" do
-      AMQP.should_receive(:connect).with({:foo => "aaa"}).and_return(@mock_connection)
+      AMQP.should_receive(:connect).with({:user=>"guest", :pass=>"guest", :vhost=>"/",
+          :logging=>false, :insist=>false, :host=>"localhost", :port=>5672,:foo => "aaa"}).and_return(@mock_connection)
       AMQP::Channel.should_receive(:new).with(@mock_connection, :prefetch => 1).and_return(@mock_channel)
-      AMQP::Exchange.should_receive(:new).with(@mock_channel, "direct", "exchange1", :durable => true).and_return(@mock_exchange)
-      AMQP::Queue.should_receive(:new).with(@mock_channel, "queue1", :durable => true).and_return(@mock_queue)
+      AMQP::Exchange.should_receive(:new).with(@mock_channel, "direct", "exchange1",
+        :passive=>false, :durable=>true, :auto_delete=>false, :internal=>false, :nowait=>true).and_return(@mock_exchange)
+      AMQP::Queue.should_receive(:new).with(@mock_channel, "queue1",
+        :passive=>false, :durable=>true, :auto_delete=>false, :exclusive=>false, :nowait=>true,
+        :subscribe=>{:ack=>true, :nowait=>true, :confirm=>nil}).and_return(@mock_queue)
       @mock_queue.should_receive(:bind).with(@mock_exchange)
       subject.queue.should == @mock_queue
     end
