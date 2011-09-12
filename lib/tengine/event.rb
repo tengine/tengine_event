@@ -25,8 +25,8 @@ class Tengine::Event
     # @option options [String] :key attriute key
     # @option options [String] :source_name source_name
     # @option options [Time] :occurred_at occurred_at
-    # @option options [Integer] :notification_level notification_level
-    # @option options [Symbol] :notification_level_key notification_level_key
+    # @option options [Integer] :level level
+    # @option options [Symbol] :level_key level_key
     # @option options [String] :sender_name sender_name
     # @option options [Hash] :properties properties
     # @return [Tengine::Event]
@@ -72,10 +72,10 @@ class Tengine::Event
     # config[:default_sender_name] に値が設定されていなかったらhost_nameの値が使用されます
     def default_sender_name; config[:default_sender_name] || host_name; end
 
-    # notification_levelが指定されていない場合に設定される文字列を返します
-    # config[:default_notification_level] に値が設定されていなかったらhost_nameの値が使用されます
-    def default_notification_level
-      NOTIFICATION_LEVELS_INV[(config[:default_notification_level_key] || :info).to_sym]
+    # levelが指定されていない場合に設定される文字列を返します
+    # config[:default_level] に値が設定されていなかったらhost_nameの値が使用されます
+    def default_level
+      LEVELS_INV[(config[:default_level_key] || :info).to_sym]
     end
   end
 
@@ -86,8 +86,8 @@ class Tengine::Event
   # @option attrs [String] :event_type_name event_type_name
   # @option attrs [String] :source_name source_name
   # @option attrs [Time] :occurred_at occurred_at
-  # @option attrs [Integer] :notification_level notification_level
-  # @option attrs [Symbol] :notification_level_key notification_level_key
+  # @option attrs [Integer] :level level
+  # @option attrs [Symbol] :level_key level_key
   # @option attrs [String] :sender_name sender_name
   # @option attrs [Hash] :properties properties
   # @return [Tengine::Event]
@@ -102,7 +102,7 @@ class Tengine::Event
     @key ||= klass.uuid_gen.generate # Stringを返す
     @source_name ||= klass.default_source_name
     @sender_name ||= klass.default_sender_name
-    @notification_level ||= klass.default_notification_level
+    @level ||= klass.default_level
   end
 
   # @attribute
@@ -133,8 +133,8 @@ class Tengine::Event
     end
   end
 
-  # from notification_level to notification_level_key
-  NOTIFICATION_LEVELS = {
+  # from level to level_key
+  LEVELS = {
       0 => :gr_heartbeat,
       1 => :debug,
       2 => :info,
@@ -143,18 +143,18 @@ class Tengine::Event
       5 => :fatal,
   }.freeze
 
-  # from notification_level_key to notification_level
-  NOTIFICATION_LEVELS_INV = NOTIFICATION_LEVELS.invert.freeze
+  # from level_key to level
+  LEVELS_INV = LEVELS.invert.freeze
 
   # @attribute
   # イベントの通知レベル
-  attr_accessor :notification_level
+  attr_accessor :level
 
   # @attribute
   # イベントの通知レベルキー
   # :gr_heartbeat/:debug/:info/:warn/:error/:fatal
-  def notification_level_key; NOTIFICATION_LEVELS[notification_level];end
-  def notification_level_key=(v); self.notification_level = NOTIFICATION_LEVELS_INV[v.to_sym]; end
+  def level_key; LEVELS[level];end
+  def level_key=(v); self.level = LEVELS_INV[v.to_sym]; end
 
   # @attribute
   # イベントの送信者名。
@@ -176,7 +176,7 @@ class Tengine::Event
     end
   end
 
-  ATTRIBUTE_NAMES = [:event_type_name, :key, :source_name, :occurred_at, :notification_level, :sender_name, :properties].freeze
+  ATTRIBUTE_NAMES = [:event_type_name, :key, :source_name, :occurred_at, :level, :sender_name, :properties].freeze
 
   # @return [Hash] attributes of this object
   def attributes

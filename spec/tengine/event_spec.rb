@@ -19,7 +19,7 @@ describe "Tengine::Event" do
 
       it{ Tengine::Event.default_source_name.should == expected_host_name }
       it{ Tengine::Event.default_sender_name.should == expected_host_name }
-      it{ Tengine::Event.default_notification_level.should == 2 }
+      it{ Tengine::Event.default_level.should == 2 }
 
       subject{ Tengine::Event.new }
       it{ subject.should be_a(Tengine::Event) }
@@ -27,8 +27,8 @@ describe "Tengine::Event" do
       its(:event_type_name){ should be_nil }
       its(:source_name){ should == expected_host_name}
       its(:occurred_at){ should be_nil }
-      its(:notification_level){ should == 2}
-      its(:notification_level_key){ should == :info}
+      its(:level){ should == 2}
+      its(:level_key){ should == :info}
       its(:sender_name){ should == expected_host_name }
       its(:properties){ should be_a(Hash) }
       its(:properties){ should be_empty }
@@ -37,7 +37,7 @@ describe "Tengine::Event" do
         attrs.should be_a(Hash)
         attrs.delete(:key).should_not be_nil
         attrs.should == {
-          :notification_level=>2,
+          :level=>2,
           :source_name => expected_host_name,
           :sender_name => expected_host_name,
         }
@@ -47,7 +47,7 @@ describe "Tengine::Event" do
         hash.should be_a(Hash)
         hash.delete('key').should =~ /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/
         hash.should == {
-          "notification_level" => 2,
+          "level" => 2,
           'source_name' => expected_host_name,
           'sender_name' => expected_host_name,
         }
@@ -59,7 +59,7 @@ describe "Tengine::Event" do
         Tengine::Event.config = {
           :default_source_name => "event_source1",
           :default_sender_name => "sender1",
-          :default_notification_level_key => :warn
+          :default_level_key => :warn
         }
       end
       after do
@@ -68,7 +68,7 @@ describe "Tengine::Event" do
 
       it{ Tengine::Event.default_source_name.should == "event_source1" }
       it{ Tengine::Event.default_sender_name.should == "sender1" }
-      it{ Tengine::Event.default_notification_level.should == 3 }
+      it{ Tengine::Event.default_level.should == 3 }
 
       subject{ Tengine::Event.new }
       it{ subject.should be_a(Tengine::Event) }
@@ -76,8 +76,8 @@ describe "Tengine::Event" do
       its(:event_type_name){ should be_nil }
       its(:source_name){ should == "event_source1"}
       its(:occurred_at){ should be_nil }
-      its(:notification_level){ should == 3}
-      its(:notification_level_key){ should == :warn}
+      its(:level){ should == 3}
+      its(:level_key){ should == :warn}
       its(:sender_name){ should == "sender1" }
       its(:properties){ should be_a(Hash) }
       its(:properties){ should be_empty }
@@ -86,7 +86,7 @@ describe "Tengine::Event" do
         attrs.should be_a(Hash)
         attrs.delete(:key).should_not be_nil
         attrs.should == {
-          :notification_level=>3,
+          :level=>3,
           :source_name => "event_source1",
           :sender_name => "sender1",
         }
@@ -96,7 +96,7 @@ describe "Tengine::Event" do
         hash.should be_a(Hash)
         hash.delete('key').should =~ /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/
         hash.should == {
-          'notification_level'=>3,
+          'level'=>3,
           'source_name' => "event_source1",
           'sender_name' => "sender1",
         }
@@ -111,7 +111,7 @@ describe "Tengine::Event" do
         :key => "hoge",
         'source_name' => "server1",
         :occurred_at => Time.utc(2011,8,11,12,0),
-        :notification_level_key => 'error',
+        :level_key => 'error',
         'sender_name' => "server2",
         :properties => {:bar => "ABC", :baz => 999}
         )}
@@ -120,8 +120,8 @@ describe "Tengine::Event" do
     its(:event_type_name){ should == "foo" }
     its(:source_name){ should == "server1" }
     its(:occurred_at){ should == Time.utc(2011,8,11,12,0) }
-    its(:notification_level){ should == 4}
-    its(:notification_level_key){ should == :error}
+    its(:level){ should == 4}
+    its(:level_key){ should == :error}
     its(:sender_name){ should == "server2" }
     its(:properties){ should == {'bar' => "ABC", 'baz' => 999}}
     it {
@@ -131,7 +131,7 @@ describe "Tengine::Event" do
         :key => "hoge",
         :source_name => "server1",
         :occurred_at => Time.utc(2011,8,11,12,0),
-        :notification_level => 4,
+        :level => 4,
         :sender_name => "server2",
         :properties => {'bar' => "ABC", 'baz' => 999}
       }
@@ -140,7 +140,7 @@ describe "Tengine::Event" do
       hash = JSON.parse(subject.to_json)
       hash.should be_a(Hash)
       hash.should == {
-        "notification_level"=>4,
+        "level"=>4,
         'event_type_name' => 'foo',
         'key' => "hoge",
         'source_name' => "server1",
@@ -163,7 +163,7 @@ describe "Tengine::Event" do
       hash = JSON.parse(subject.to_json)
       hash.should be_a(Hash)
       hash.should == {
-        "notification_level"=>2,
+        "level"=>2,
         'key' => "hoge",
         'occurred_at' => "2011-08-31T03:00:00Z", # Timeオブジェクトは文字列に変換されます
         'source_name' => "this_server1",
@@ -191,7 +191,7 @@ describe "Tengine::Event" do
     }.to raise_error(ArgumentError, /no time information/)
   end
 
-  describe :notification_level do
+  describe :level do
     {
       0 => :gr_heartbeat,
       1 => :debug,
@@ -200,19 +200,19 @@ describe "Tengine::Event" do
       4 => :error,
       5 => :fatal,
     }.each do |level, level_key|
-      context "set by notification_level" do
-        subject{ Tengine::Event.new(:notification_level => level) }
-        its(:notification_level_key){ should == level_key}
+      context "set by level" do
+        subject{ Tengine::Event.new(:level => level) }
+        its(:level_key){ should == level_key}
       end
-      context "set Symbol by notification_level_key" do
-        subject{ Tengine::Event.new(:notification_level_key => level_key.to_sym) }
-        its(:notification_level){ should == level}
-        its(:notification_level_key){ should == level_key.to_sym}
+      context "set Symbol by level_key" do
+        subject{ Tengine::Event.new(:level_key => level_key.to_sym) }
+        its(:level){ should == level}
+        its(:level_key){ should == level_key.to_sym}
       end
-      context "set String by notification_level_key" do
-        subject{ Tengine::Event.new(:notification_level_key => level_key.to_s) }
-        its(:notification_level){ should == level}
-        its(:notification_level_key){ should == level_key.to_sym}
+      context "set String by level_key" do
+        subject{ Tengine::Event.new(:level_key => level_key.to_s) }
+        its(:level){ should == level}
+        its(:level_key){ should == level_key.to_sym}
       end
     end
   end
@@ -248,7 +248,7 @@ describe "Tengine::Event" do
           :key => "hoge",
           'source_name' => "server1",
           :occurred_at => Time.utc(2011,8,11,12,0),
-          :notification_level_key => 'error',
+          :level_key => 'error',
           'sender_name' => "server2",
           :properties => {:bar => "ABC", :baz => 999}
           )
@@ -258,8 +258,8 @@ describe "Tengine::Event" do
       its(:event_type_name){ should == "foo" }
       its(:source_name){ should == "server1" }
       its(:occurred_at){ should == Time.utc(2011,8,11,12,0) }
-      its(:notification_level){ should == 4}
-      its(:notification_level_key){ should == :error}
+      its(:level){ should == 4}
+      its(:level_key){ should == :error}
       its(:sender_name){ should == "server2" }
       its(:properties){ should == {'bar' => "ABC", 'baz' => 999}}
     end
