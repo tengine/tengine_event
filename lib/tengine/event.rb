@@ -11,6 +11,8 @@ class Tengine::Event
   class << self
     def config; @config ||= {}; end
     def config=(v); @config = v; end
+
+    attr_writer :mq_suite
     def mq_suite; @mq_suite ||= Tengine::Mq::Suite.new(config); end
 
     def uuid_gen
