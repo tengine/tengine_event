@@ -16,6 +16,8 @@ describe "Tengine::Event" do
     context "without config" do
       before do
         Tengine::Event.config = {}
+        @now = Time.now
+        Time.stub!(:now).and_return(@now)
       end
 
       it{ Tengine::Event.default_source_name.should == expected_source_name }
@@ -27,7 +29,7 @@ describe "Tengine::Event" do
       its(:key){ should =~ /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/ }
       its(:event_type_name){ should be_nil }
       its(:source_name){ should == expected_source_name}
-      its(:occurred_at){ should be_nil }
+      its(:occurred_at){ should == @now.utc }
       its(:level){ should == 2}
       its(:level_key){ should == :info}
       its(:sender_name){ should == expected_source_name }
@@ -38,6 +40,7 @@ describe "Tengine::Event" do
         attrs.should be_a(Hash)
         attrs.delete(:key).should_not be_nil
         attrs.should == {
+          :occurred_at => @now.utc,
           :level=>2,
           :source_name => expected_source_name,
           :sender_name => expected_source_name,
@@ -48,6 +51,7 @@ describe "Tengine::Event" do
         hash.should be_a(Hash)
         hash.delete('key').should =~ /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/
         hash.should == {
+          'occurred_at' => @now.utc.iso8601,
           "level" => 2,
           'source_name' => expected_source_name,
           'sender_name' => expected_source_name,
@@ -62,6 +66,8 @@ describe "Tengine::Event" do
           :default_sender_name => "sender1",
           :default_level_key => :warn
         }
+        @now = Time.now
+        Time.stub!(:now).and_return(@now)
       end
       after do
         Tengine::Event.config = {}
@@ -76,7 +82,7 @@ describe "Tengine::Event" do
       its(:key){ should =~ /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/ }
       its(:event_type_name){ should be_nil }
       its(:source_name){ should == "event_source1"}
-      its(:occurred_at){ should be_nil }
+      its(:occurred_at){ should == @now.utc }
       its(:level){ should == 3}
       its(:level_key){ should == :warn}
       its(:sender_name){ should == "sender1" }
@@ -87,6 +93,7 @@ describe "Tengine::Event" do
         attrs.should be_a(Hash)
         attrs.delete(:key).should_not be_nil
         attrs.should == {
+          :occurred_at => @now.utc,
           :level=>3,
           :source_name => "event_source1",
           :sender_name => "sender1",
@@ -97,6 +104,7 @@ describe "Tengine::Event" do
         hash.should be_a(Hash)
         hash.delete('key').should =~ /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/
         hash.should == {
+          'occurred_at' => @now.utc.iso8601,
           'level'=>3,
           'source_name' => "event_source1",
           'sender_name' => "sender1",

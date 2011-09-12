@@ -94,6 +94,7 @@ class Tengine::Event
     @source_name ||= klass.default_source_name
     @sender_name ||= klass.default_sender_name
     @level ||= klass.default_level
+    @occurred_at ||= Time.now.utc
   end
 
   # @attribute
