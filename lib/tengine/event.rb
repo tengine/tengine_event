@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-require 'tengine'
+require 'tengine_event'
 
 require 'active_support/core_ext/object/blank'
 require 'active_support/json'
