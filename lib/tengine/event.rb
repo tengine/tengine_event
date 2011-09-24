@@ -2,6 +2,7 @@
 require 'tengine_event'
 
 require 'active_support/core_ext/object/blank'
+require 'active_support/core_ext/hash/keys'
 require 'active_support/json'
 require 'uuid'
 
@@ -161,11 +162,7 @@ class Tengine::Event
   end
 
   def properties=(hash)
-    if hash
-      @properties = (hash || {}).inject({}){|d, (k,v)| d[k.to_s] = v; d}
-    else
-      @properties = nil
-    end
+    @properties = (hash || {}).stringify_keys
   end
 
   ATTRIBUTE_NAMES = [:event_type_name, :key, :source_name, :occurred_at, :level, :sender_name, :properties].freeze
