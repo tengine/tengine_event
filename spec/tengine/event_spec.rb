@@ -189,9 +189,21 @@ describe "Tengine::Event" do
 
 
   describe :occurred_at do
+    context "valid nil" do
+      subject{ Tengine::Event.new(:occurred_at => nil) }
+      it do
+        subject.occurred_at = nil
+        subject.occurred_at.should == nil
+      end
+    end
     context "valid String" do
       subject{ Tengine::Event.new(:occurred_at => "2011-08-31 12:00:00 +0900") }
       its(:occurred_at){ should be_a(Time); should == Time.utc(2011, 8, 31, 3)}
+    end
+    it "invalid Class: Range" do
+      expect{
+        Tengine::Event.new(:occurred_at => (1..3))
+      }.to raise_error(ArgumentError)
     end
   end
   it 'occurred_at must be Time' do
@@ -225,6 +237,22 @@ describe "Tengine::Event" do
       end
     end
   end
+
+  describe :properties do
+    subject{ Tengine::Event.new }
+    it "valid usage" do
+      subject.properties.should == {}
+      subject.properties = {:foo => 123}
+      subject.properties.should == {'foo' => 123}
+      subject.properties = {:bar => 456}
+      subject.properties.should == {'bar' => 456}
+    end
+    it "assign nil" do
+      subject.properties = nil
+      subject.properties.should == {}
+    end
+  end
+
 
   describe :fire do
     before do
@@ -274,6 +302,54 @@ describe "Tengine::Event" do
       its(:level_key){ should == :error}
       its(:sender_name){ should == "server2" }
       its(:properties){ should == {'bar' => "ABC", 'baz' => 999}}
+    end
+
+    context "can parse valid json array" do
+      before do
+        source1 = Tengine::Event.new(
+          :event_type_name => :foo,
+          :key => "hoge1",
+          'source_name' => "server1",
+          :occurred_at => Time.utc(2011,8,11,12,0),
+          :level_key => 'error',
+          'sender_name' => "server2",
+          :properties => {:bar => "ABC", :baz => 999}
+          )
+        source2 = Tengine::Event.new(
+          :event_type_name => :bar,
+          :key => "hoge2",
+          'source_name' => "server3",
+          :occurred_at => Time.utc(2011,9,24,15,50),
+          :level_key => 'warn',
+          'sender_name' => "server4",
+          :properties => {:bar => "DEF", :baz => 777}
+          )
+        @parsed = Tengine::Event.parse([source1, source2].to_json)
+      end
+
+      context "first" do
+        subject{ @parsed.first }
+        its(:key){ should == "hoge1" }
+        its(:event_type_name){ should == "foo" }
+        its(:source_name){ should == "server1" }
+        its(:occurred_at){ should == Time.utc(2011,8,11,12,0) }
+        its(:level){ should == 4}
+        its(:level_key){ should == :error}
+        its(:sender_name){ should == "server2" }
+        its(:properties){ should == {'bar' => "ABC", 'baz' => 999}}
+      end
+
+      context "last" do
+        subject{ @parsed.last }
+        its(:key){ should == "hoge2" }
+        its(:event_type_name){ should == "bar" }
+        its(:source_name){ should == "server3" }
+        its(:occurred_at){ should == Time.utc(2011,9,24,15,50) }
+        its(:level){ should == 3}
+        its(:level_key){ should == :warn}
+        its(:sender_name){ should == "server4" }
+        its(:properties){ should == {'bar' => "DEF", 'baz' => 777}}
+      end
     end
 
     it "raise ArgumentError for invalid attribute name" do
