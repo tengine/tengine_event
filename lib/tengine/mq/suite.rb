@@ -10,6 +10,7 @@ class Tengine::Mq::Suite
   extend ActiveSupport::Memoizable
 
   attr_reader :config
+  attr_reader :auto_reconnect_delay
 
   def initialize(config = {})
     c = (config || {}).symbolize_keys
@@ -17,6 +18,7 @@ class Tengine::Mq::Suite
       d[key] = DEFAULT_CONFIG[key].merge((c[key] || {}).symbolize_keys)
       d
     end
+    @auto_reconnect_delay = @config[:connection].delete(:auto_reconnect_delay)
   end
 
   DEFAULT_CONFIG= {
@@ -29,6 +31,7 @@ class Tengine::Mq::Suite
       :insist => false,
       :host => 'localhost',
       :port => 5672,
+      :auto_reconnect_delay => 1, # in seconds
     }.freeze,
 
     :exchange => {
@@ -56,12 +59,22 @@ class Tengine::Mq::Suite
     }
   }
 
-  def connection
-    AMQP.connect(config[:connection])
+  def connection(&block)
+    result = AMQP.connect(config[:connection], &block)
+    unless auto_reconnect_delay.nil?
+      result.on_tcp_connection_loss do |conn, settings|
+        conn.reconnect(false, auto_reconnect_delay.to_i)
+      end
+    end
+    result
   end
 
   def channel
-    AMQP::Channel.new(connection, :prefetch => 1)
+    options = {
+      :prefetch => 1,
+      :auto_recovery => !auto_reconnect_delay.nil?,
+    }
+    AMQP::Channel.new(connection, options)
   end
 
   def exchange

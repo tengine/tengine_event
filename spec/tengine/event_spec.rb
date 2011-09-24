@@ -238,7 +238,8 @@ describe "Tengine::Event" do
       @mock_exchange = mock(:exchange)
       AMQP.should_receive(:connect).with({:user=>"guest", :pass=>"guest", :vhost=>"/",
           :logging=>false, :insist=>false, :host=>"localhost", :port=>5672, :foo => "aaa"}).and_return(@mock_connection)
-      AMQP::Channel.should_receive(:new).with(@mock_connection, :prefetch => 1).and_return(@mock_channel)
+      @mock_connection.should_receive(:on_tcp_connection_loss)
+      AMQP::Channel.should_receive(:new).with(@mock_connection, :prefetch => 1, :auto_recovery => true).and_return(@mock_channel)
       AMQP::Exchange.should_receive(:new).with(@mock_channel, "direct", "exchange1",
         :passive=>false, :durable=>true, :auto_delete=>false, :internal=>false, :nowait=>true).and_return(@mock_exchange)
     end

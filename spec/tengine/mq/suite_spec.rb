@@ -7,7 +7,7 @@ describe "Tengine::Mq::Suite" do
   context "normal usage" do
     before do
       @config = {
-        :connection => {"foo" => "aaa"},
+        :connection => {"auto_reconnect_delay" => 3},
         :exchange => {'name' => "exchange1", 'type' => 'direct', 'durable' => true},
         :queue => {'name' => "queue1", 'durable' => true},
       }
@@ -21,8 +21,9 @@ describe "Tengine::Mq::Suite" do
 
     it "'s exchange must be AMQP::Exchange" do
       AMQP.should_receive(:connect).with({:user=>"guest", :pass=>"guest", :vhost=>"/",
-          :logging=>false, :insist=>false, :host=>"localhost", :port=>5672, :foo => "aaa"}).and_return(@mock_connection)
-      AMQP::Channel.should_receive(:new).with(@mock_connection, :prefetch => 1).and_return(@mock_channel)
+          :logging=>false, :insist=>false, :host=>"localhost", :port=>5672}).and_return(@mock_connection)
+      @mock_connection.should_receive(:on_tcp_connection_loss)
+      AMQP::Channel.should_receive(:new).with(@mock_connection, :prefetch => 1, :auto_recovery => true).and_return(@mock_channel)
       AMQP::Exchange.should_receive(:new).with(@mock_channel, "direct", "exchange1",
         :passive=>false, :durable=>true, :auto_delete=>false, :internal=>false, :nowait=>true).and_return(@mock_exchange)
       subject.exchange.should == @mock_exchange
@@ -30,8 +31,9 @@ describe "Tengine::Mq::Suite" do
 
     it "'s queue must be AMQP::Queue" do
       AMQP.should_receive(:connect).with({:user=>"guest", :pass=>"guest", :vhost=>"/",
-          :logging=>false, :insist=>false, :host=>"localhost", :port=>5672,:foo => "aaa"}).and_return(@mock_connection)
-      AMQP::Channel.should_receive(:new).with(@mock_connection, :prefetch => 1).and_return(@mock_channel)
+          :logging=>false, :insist=>false, :host=>"localhost", :port=>5672}).and_return(@mock_connection)
+      @mock_connection.should_receive(:on_tcp_connection_loss)
+      AMQP::Channel.should_receive(:new).with(@mock_connection, :prefetch => 1, :auto_recovery => true).and_return(@mock_channel)
       AMQP::Exchange.should_receive(:new).with(@mock_channel, "direct", "exchange1",
         :passive=>false, :durable=>true, :auto_delete=>false, :internal=>false, :nowait=>true).and_return(@mock_exchange)
       AMQP::Queue.should_receive(:new).with(@mock_channel, "queue1",
@@ -39,6 +41,14 @@ describe "Tengine::Mq::Suite" do
         :subscribe=>{:ack=>true, :nowait=>true, :confirm=>nil}).and_return(@mock_queue)
       @mock_queue.should_receive(:bind).with(@mock_exchange)
       subject.queue.should == @mock_queue
+    end
+
+    it "'s connection should reconnect on_tcp_connection_loss" do
+      AMQP.should_receive(:connect).with({:user=>"guest", :pass=>"guest", :vhost=>"/",
+          :logging=>false, :insist=>false, :host=>"localhost", :port=>5672}).and_return(@mock_connection)
+      @mock_connection.should_receive(:on_tcp_connection_loss).and_yield(@mock_connection, @config[:connection])
+      @mock_connection.should_receive(:reconnect).with(false, 3)
+      subject.connection
     end
 
   end
