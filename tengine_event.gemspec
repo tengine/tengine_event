@@ -4,15 +4,15 @@
 # -*- encoding: utf-8 -*-
 
 Gem::Specification.new do |s|
-  s.name = "tengine_event"
-  s.version = "0.2.4"
+  s.name = %q{tengine_event}
+  s.version = "0.2.5"
 
   s.required_rubygems_version = Gem::Requirement.new(">= 0") if s.respond_to? :required_rubygems_version=
-  s.authors = ["akimatter"]
-  s.date = "2011-09-24"
-  s.description = "Tengine Event API to access the queue"
-  s.email = "akm2000@gmail.com"
-  s.executables = ["tengine_fire"]
+  s.authors = [%q{akimatter}]
+  s.date = %q{2011-09-27}
+  s.description = %q{Tengine Event API to access the queue}
+  s.email = %q{akm2000@gmail.com}
+  s.executables = [%q{tengine_fire}]
   s.extra_rdoc_files = [
     "LICENSE.txt",
     "README.rdoc"
@@ -28,21 +28,23 @@ Gem::Specification.new do |s|
     "VERSION",
     "bin/tengine_fire",
     "lib/tengine/event.rb",
+    "lib/tengine/event/model_notifiable.rb",
     "lib/tengine/event/sender.rb",
     "lib/tengine/mq.rb",
     "lib/tengine/mq/suite.rb",
     "lib/tengine_event.rb",
     "spec/spec_helper.rb",
+    "spec/tengine/event/model_notifiable_spec.rb",
     "spec/tengine/event/sender_spec.rb",
     "spec/tengine/event_spec.rb",
     "spec/tengine/mq/suite_spec.rb",
     "tengine_event.gemspec"
   ]
-  s.homepage = "http://github.com/akm/tengine_event"
-  s.licenses = ["MIT"]
-  s.require_paths = ["lib"]
-  s.rubygems_version = "1.8.10"
-  s.summary = "Tengine Event API to access the queue"
+  s.homepage = %q{http://github.com/akm/tengine_event}
+  s.licenses = [%q{MIT}]
+  s.require_paths = [%q{lib}]
+  s.rubygems_version = %q{1.8.6}
+  s.summary = %q{Tengine Event API to access the queue}
 
   if s.respond_to? :specification_version then
     s.specification_version = 3
