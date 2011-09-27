@@ -10,6 +10,7 @@ require 'uuid'
 class Tengine::Event
 
   autoload :Sender, 'tengine/event/sender'
+  autoload :ModelNotifiable, 'tengine/event/model_notifiable'
 
   class << self
     # see Tengine::Event::Sender#fire
