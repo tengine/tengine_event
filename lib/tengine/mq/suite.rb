@@ -14,7 +14,7 @@ class Tengine::Mq::Suite
 
   def initialize(config = {})
     c = (config || {}).symbolize_keys
-    @config = [:connection, :exchange, :queue].inject({}) do |d, key|
+    @config = [:sender, :connection, :exchange, :queue].inject({}) do |d, key|
       d[key] = DEFAULT_CONFIG[key].merge((c[key] || {}).symbolize_keys)
       d
     end
@@ -22,6 +22,11 @@ class Tengine::Mq::Suite
   end
 
   DEFAULT_CONFIG= {
+    :sender => {
+      :retry_interval => 1,  # in seconds
+      :retry_count => 30,
+    }.freeze,
+
     :connection => {
       :user => 'guest',
       :pass => 'guest',
