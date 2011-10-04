@@ -21,7 +21,8 @@ end
 
 # see https://github.com/eventmachine/eventmachine/blob/master/tests/test_error_handler.rb
 EM.error_handler{ |e|
-  puts "** tengine.fire Error raised during event loop: #{e.message}"
+  puts "[error] tengine.fire Error raised during event loop: #{e.class}, #{e.message}\n"
+  puts "#{e.backtrace}\n"
   EM.error_handler(nil)
   EM.stop
 }

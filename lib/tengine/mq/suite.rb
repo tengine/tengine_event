@@ -23,8 +23,9 @@ class Tengine::Mq::Suite
 
   DEFAULT_CONFIG= {
     :sender => {
+      :keep_connection => false,
       :retry_interval => 1,  # in seconds
-      :retry_count => 10,
+      :retry_count => 30,
     }.freeze,
 
     :connection => {
