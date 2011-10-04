@@ -24,7 +24,7 @@ class Tengine::Mq::Suite
   DEFAULT_CONFIG= {
     :sender => {
       :retry_interval => 1,  # in seconds
-      :retry_count => 30,
+      :retry_count => 10,
     }.freeze,
 
     :connection => {
@@ -47,6 +47,9 @@ class Tengine::Mq::Suite
       :auto_delete => false,
       :internal => false,
       :nowait => true,
+      :publish => {
+        :persistent => true,
+      },
     },
 
     :queue => {
@@ -70,6 +73,11 @@ class Tengine::Mq::Suite
       result.on_tcp_connection_loss do |conn, settings|
         conn.reconnect(false, auto_reconnect_delay.to_i)
       end
+      result.after_recovery do |conn, settings|
+        channel(true)
+        exchange(true)
+        queue(true)
+      end
     end
     result
   end
@@ -84,6 +92,7 @@ class Tengine::Mq::Suite
 
   def exchange
     c = config[:exchange]
+    c.delete(:publish)
     exchange_type = c.delete(:type)
     exchange_name = c.delete(:name)
     AMQP::Exchange.new(channel, exchange_type, exchange_name, c)
