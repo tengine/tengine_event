@@ -258,7 +258,7 @@ describe "Tengine::Event" do
     before do
       Tengine::Event.config = {
         :connection => {"foo" => "aaa"},
-        :exchange => {'name' => "exchange1", 'type' => 'direct', 'durable' => true},
+        :exchange => {'name' => "exchange1", 'type' => 'direct', 'durable' => true, 'publish' => {'persistent' => true}},
         :queue => {'name' => "queue1", 'durable' => true},
       }
       @mock_connection = mock(:connection)
@@ -267,6 +267,7 @@ describe "Tengine::Event" do
       AMQP.should_receive(:connect).with({:user=>"guest", :pass=>"guest", :vhost=>"/",
           :logging=>false, :insist=>false, :host=>"localhost", :port=>5672, :foo => "aaa"}).and_return(@mock_connection)
       @mock_connection.should_receive(:on_tcp_connection_loss)
+      @mock_connection.should_receive(:after_recovery)
       AMQP::Channel.should_receive(:new).with(@mock_connection, :prefetch => 1, :auto_recovery => true).and_return(@mock_channel)
       AMQP::Exchange.should_receive(:new).with(@mock_channel, "direct", "exchange1",
         :passive=>false, :durable=>true, :auto_delete=>false, :internal=>false, :nowait=>true).and_return(@mock_exchange)
@@ -274,7 +275,8 @@ describe "Tengine::Event" do
 
     it "JSON形式にserializeしてexchangeにpublishする" do
       expected_event = Tengine::Event.new(:event_type_name => :foo, :key => "uniq_key")
-      @mock_exchange.should_receive(:publish).with(expected_event.to_json)
+      @mock_exchange.should_receive(:publish).with(expected_event.to_json, "persistent" => true)
+      EM.should_receive(:add_timer).with(1)
       Tengine::Event.fire(:foo, :key => "uniq_key")
     end
   end
