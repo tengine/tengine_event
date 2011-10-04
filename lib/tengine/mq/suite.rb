@@ -91,7 +91,7 @@ class Tengine::Mq::Suite
   end
 
   def exchange
-    c = config[:exchange]
+    c = config[:exchange].dup
     c.delete(:publish)
     exchange_type = c.delete(:type)
     exchange_name = c.delete(:name)
@@ -99,7 +99,7 @@ class Tengine::Mq::Suite
   end
 
   def queue
-    c = config[:queue]
+    c = config[:queue].dup
     queue_name = c.delete(:name)
     queue = AMQP::Queue.new(channel, queue_name, c)
     queue.bind(exchange)
