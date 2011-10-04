@@ -19,6 +19,9 @@ class Tengine::Mq::Suite
       d
     end
     @auto_reconnect_delay = @config[:connection].delete(:auto_reconnect_delay)
+    # 一度も、AMQP.connectを実行する前に、connection に関する例外が発生すると、
+    # 再接続などのハンドリングができないので、初期化時に connection への接続までを行います。
+    connection
   end
 
   DEFAULT_CONFIG= {
