@@ -19,11 +19,18 @@ options = ARGV.inject({}) do |d, arg|
   d
 end
 
+# see https://github.com/eventmachine/eventmachine/blob/master/tests/test_error_handler.rb
+EM.error_handler{ |e|
+  puts "** tengine.fire Error raised during event loop: #{e.message}"
+  EM.error_handler(nil)
+  EM.stop
+}
+
 EM.run do
   EM.next_tick do
     Tengine::Event.fire(event_type_name, options)
-    EM.add_timer(1) {
-      Tengine::Event.mq_suite.connection.close { EM.stop }
-    }
   end
 end
+
+Signal.trap("TERM") { connection.close { EM.stop } }
+Signal.trap("INT")  { connection.close { EM.stop } }
