@@ -67,15 +67,30 @@ describe "Tengine::Event::Sender" do
         @sender.fire(expected_event)
       end
 
-      it "publish後に特定の処理を行う" do
-        expected_event = Tengine::Event.new(:event_type_name => :foo, :key => "uniq_key")
-        @mock_exchange.should_receive(:publish).with(expected_event.to_json, :persistent => true).and_yield
-        @mock_connection.should_receive(:disconnect).and_yield
-        EM.should_receive(:add_timer).with(1)
-        EM.should_receive(:stop)
-        block_called = false
-        @sender.fire(expected_event){ block_called = true }
-        block_called.should == true
+      context "publish後に特定の処理を行う" do
+        it "カスタム処理" do
+          expected_event = Tengine::Event.new(:event_type_name => :foo, :key => "uniq_key")
+          @mock_exchange.should_receive(:publish).with(expected_event.to_json, :persistent => true).and_yield
+          @mock_connection.should_receive(:disconnect).and_yield
+          EM.should_receive(:add_timer).with(1)
+          EM.should_receive(:stop)
+          block_called = false
+          @sender.fire(expected_event){ block_called = true }
+          block_called.should == true
+        end
+
+        it "自動で切断せずに、接続を維持する" do
+          expected_event = Tengine::Event.new(:event_type_name => :foo, :key => "uniq_key")
+          @mock_exchange.should_receive(:publish).with(expected_event.to_json, :persistent => true).and_yield
+          @mock_connection.should_not_receive(:disconnect)
+          EM.should_receive(:add_timer).with(1)
+          EM.should_not_receive(:stop)
+          block_called = false
+          @sender.default_keep_connection = true
+          @sender.fire(expected_event){ block_called = true }
+          block_called.should == true
+        end
+
       end
     end
 
@@ -95,7 +110,6 @@ describe "Tengine::Event::Sender" do
         }.to raise_error(Tengine::Event::Sender::RetryError)
         block_called.should == false
       end
-
 
       it "エラーが発生しても設定のリトライが行われる" do
         expected_event = Tengine::Event.new(:event_type_name => :foo, :key => "uniq_key")

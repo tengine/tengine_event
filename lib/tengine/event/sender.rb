@@ -20,6 +20,8 @@ class Tengine::Event::Sender
   end
 
   attr_reader :mq_suite
+  attr_accessor :default_keep_connection
+
   def initialize(config_or_mq_suite = nil)
     case config_or_mq_suite
     when Tengine::Mq::Suite then
@@ -27,6 +29,7 @@ class Tengine::Event::Sender
     when nil, Hash then
       @mq_suite = Tengine::Mq::Suite.new(config_or_mq_suite)
     end
+    @default_keep_connection = (@mq_suite.config[:sender] || {})[:keep_connection]
   end
 
   # publish an event message to AMQP exchange
@@ -45,7 +48,7 @@ class Tengine::Event::Sender
   # @return [Tengine::Event]
   def fire(event_or_event_type_name, options = {}, &block)
     opts ||= (options || {}).dup
-    keep_connection ||= (opts.delete(:keep_connection) || mq_suite.config[:sender][:keep_connection])
+    keep_connection ||= (opts.delete(:keep_connection) || default_keep_connection)
     sender_retry_interval ||= (opts.delete(:retry_interval) || mq_suite.config[:sender][:retry_interval]).to_i
     sender_retry_count ||= (opts.delete(:retry_count) || mq_suite.config[:sender][:retry_count]).to_i
     event =
