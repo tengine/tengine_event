@@ -32,7 +32,6 @@ class Tengine::Event::Sender
     keep_connection ||= (opts.delete(:keep_connection) || mq_suite.config[:sender][:keep_connection])
     sender_retry_interval ||= (opts.delete(:retry_interval) || mq_suite.config[:sender][:retry_interval]).to_i
     sender_retry_count ||= (opts.delete(:retry_count) || mq_suite.config[:sender][:retry_count]).to_i
-    @retrying_count ||= 0
       event =
         case event_or_event_type_name
         when Tengine::Event then event_or_event_type_name
@@ -41,6 +40,7 @@ class Tengine::Event::Sender
             :event_type_name => event_or_event_type_name.to_s))
         end
 
+    @retrying_count ||= 0
     begin
       # ここで渡される block としては、以下のように mq の connection クローズ と eventmachine の停止が考えられる
       # block = Proc.new(mq.connection.disconnect { EM.stop })
