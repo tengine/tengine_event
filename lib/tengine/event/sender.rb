@@ -3,6 +3,22 @@ require 'tengine/event'
 
 class Tengine::Event::Sender
 
+  class RetryError < StandardError
+    attr_reader :event, :retry_count, :source
+    def initialize(event, retry_count, source = nil)
+      @event, @retry_count = event, retry_count
+      @source = source.is_a?(RetryError) ? source.source : source
+    end
+    def message
+      result = "event %s has be tried to send %d times." % [event, retry_count]
+      if @source
+        result << " The last source exception was #{@source.inspect}"
+      end
+      result
+    end
+    alias_method :to_s, :message
+  end
+
   attr_reader :mq_suite
   def initialize(config_or_mq_suite = nil)
     case config_or_mq_suite
@@ -58,7 +74,7 @@ class Tengine::Event::Sender
       end
       EM.add_timer(sender_retry_interval) do
         if @retrying_count >= sender_retry_count
-          raise "sender retry error"
+          raise RetryError.new(event, @retrying_count)
         end
         @retrying_count += 1
         unless @success_published
@@ -71,7 +87,7 @@ class Tengine::Event::Sender
       if @retrying_count >= sender_retry_count
         # 送信に失敗しているのに自動的に切断してはいけません
         # mq_suite.connection.disconnect { EM.stop } unless keep_connection
-        raise e
+        raise RetryError.new(event, @retrying_count, e)
       else
         @retrying_count += 1
         sleep(sender_retry_interval)

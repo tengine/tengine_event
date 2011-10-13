@@ -92,7 +92,7 @@ describe "Tengine::Event::Sender" do
         block_called = false
         expect{
           @sender.fire(expected_event){ block_called = true }
-        }.to raise_error
+        }.to raise_error(Tengine::Event::Sender::RetryError)
         block_called.should == false
       end
 
@@ -100,10 +100,16 @@ describe "Tengine::Event::Sender" do
       it "エラーが発生しても設定のリトライが行われる" do
         expected_event = Tengine::Event.new(:event_type_name => :foo, :key => "uniq_key")
         lambda {
-          # 正規のfireとリトライのfireなので、リトライ回数+1
-          @mock_exchange.should_receive(:publish).with(expected_event.to_json, {:persistent=>true}).exactly(31).times.and_raise('error')
-          @sender.fire(expected_event)
-        }.should raise_error
+          begin
+            # 正規のfireとリトライのfireなので、リトライ回数+1
+            @mock_exchange.should_receive(:publish).with(expected_event.to_json, {:persistent=>true}).exactly(31).times.and_raise('error')
+            @sender.fire(expected_event)
+          rescue Tengine::Event::Sender::RetryError => e
+            e.message.should =~ /^event #<Tengine::Event:[^\]]+> has be tried to send 30 times. The last source exception was #<RuntimeError: error>$/
+            e.to_s.should == e.message
+            raise e
+          end
+        }.should raise_error(Tengine::Event::Sender::RetryError)
       end
 
       it "エラーが発生してもオプションで指定したリトライ回数分のリトライが行われる" do
@@ -112,7 +118,7 @@ describe "Tengine::Event::Sender" do
           # 正規のfireとリトライのfireなので、リトライ回数+1
           @mock_exchange.should_receive(:publish).with(expected_event.to_json, {:persistent=>true}).exactly(2).times.and_raise('error')
           @sender.fire(expected_event, :retry_count => 1)
-        }.should raise_error
+        }.should raise_error(Tengine::Event::Sender::RetryError)
       end
 
       it "エラーが発生してもオプションで指定したリトライ間隔でリトライが行われる" do
@@ -121,7 +127,7 @@ describe "Tengine::Event::Sender" do
           # 正規のfireとリトライのfireなので、リトライ回数+1
           @mock_exchange.should_receive(:publish).with(expected_event.to_json, {:persistent=>true}).exactly(4).times.and_raise('error')
           @sender.fire(expected_event, :retry_count => 3, :retry_interval => 0)
-        }.should raise_error
+        }.should raise_error(Tengine::Event::Sender::RetryError)
       end
     end
   end
