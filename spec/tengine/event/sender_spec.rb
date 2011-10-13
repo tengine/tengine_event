@@ -66,6 +66,17 @@ describe "Tengine::Event::Sender" do
         EM.should_receive(:add_timer).with(1)
         @sender.fire(expected_event)
       end
+
+      it "publish後に特定の処理を行う" do
+        expected_event = Tengine::Event.new(:event_type_name => :foo, :key => "uniq_key")
+        @mock_exchange.should_receive(:publish).with(expected_event.to_json, :persistent => true).and_yield
+        @mock_connection.should_receive(:disconnect).and_yield
+        EM.should_receive(:add_timer).with(1)
+        EM.should_receive(:stop)
+        block_called = false
+        @sender.fire(expected_event){ block_called = true }
+        block_called.should == true
+      end
     end
 
     context "AMQP::TCPConnectionFailed 以外のエラー" do
@@ -73,6 +84,18 @@ describe "Tengine::Event::Sender" do
         # テスト実行時に1秒×30回、掛かるのは困るので、default値を変更しています。
         @sender = Tengine::Event::Sender.new(:exchange => {:name => "exchange1"}, :sender => {:retry_interval => 0})
       end
+
+      it "メッセージ送信ができなくてpublishに渡したブロックが呼び出されず、インターバルが過ぎて、EM.add_timeに渡したブロックが呼び出された場合" do
+        expected_event = Tengine::Event.new(:event_type_name => :foo, :key => "uniq_key")
+        @mock_exchange.should_receive(:publish).with(expected_event.to_json, :persistent => true).exactly(31).times
+        EM.should_receive(:add_timer).with(0).exactly(31).times.and_yield
+        block_called = false
+        expect{
+          @sender.fire(expected_event){ block_called = true }
+        }.to raise_error
+        block_called.should == false
+      end
+
 
       it "エラーが発生しても設定のリトライが行われる" do
         expected_event = Tengine::Event.new(:event_type_name => :foo, :key => "uniq_key")
