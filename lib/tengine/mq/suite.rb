@@ -78,9 +78,7 @@ class Tengine::Mq::Suite
         conn.reconnect(false, auto_reconnect_delay.to_i)
       end
       result.after_recovery do |conn, settings|
-        channel(true)
-        exchange(true)
-        queue(true)
+        reset_channel
       end
     end
     result
@@ -110,5 +108,12 @@ class Tengine::Mq::Suite
     queue
   end
   memoize :connection, :channel, :exchange, :queue
+
+  def reset_channel
+    channel(true)
+    exchange(true)
+    queue(true)
+  end
+
 
 end

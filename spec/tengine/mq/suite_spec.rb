@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 p# -*- coding: utf-8 -*-
 require File.expand_path(File.dirname(__FILE__) + '/../../spec_helper')
 
@@ -65,6 +66,32 @@ describe "Tengine::Mq::Suite" do
       @mock_connection.should_receive(:reconnect).with(false, 3)
       @mock_connection.should_receive(:after_recovery)
       subject.connection
+    end
+
+    it "'s connection should reconnect on_tcp_connection_loss, then after_recovery called" do
+      settings = {
+        :host => "localhost", :port => 5672, :user => "guest", :pass => "guest", :vhost => "/",
+        :timeout => nil, :logging => false, :ssl => false, :broker => nil, :frame_max => 131072, :insist => false
+      }
+      # connection
+      AMQP.should_receive(:connect).with({:user=>"guest", :pass=>"guest", :vhost=>"/",
+          :logging=>false, :insist=>false, :host=>"localhost", :port=>5672}).twice.and_return(@mock_connection)
+      @mock_connection.should_receive(:on_tcp_connection_loss).twice.and_yield(@mock_connection, settings)
+      @mock_connection.should_receive(:reconnect).twice.with(false, 3)
+      @mock_connection.should_receive(:after_recovery).twice # .and_yield(@mock_connection, settings)
+      # subject.should_receive(:reset_channel) # stack level too deep になってしまうので、コメントアウトしてます
+      subject.connection(true)
+    end
+
+    it "'s reset_channel call channel, exchange, queue with true to clear memoized objects" do
+      AMQP.should_receive(:connect).with({:user=>"guest", :pass=>"guest", :vhost=>"/",
+          :logging=>false, :insist=>false, :host=>"localhost", :port=>5672}).and_return(@mock_connection)
+      @mock_connection.should_receive(:on_tcp_connection_loss)
+      @mock_connection.should_receive(:after_recovery)
+      subject.should_receive(:channel).with(true)
+      subject.should_receive(:exchange).with(true)
+      subject.should_receive(:queue).with(true)
+      subject.reset_channel
     end
 
   end
