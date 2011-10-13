@@ -28,8 +28,17 @@ EM.error_handler{ |e|
 }
 
 EM.run do
-  EM.next_tick do
-    Tengine::Event.fire(event_type_name, options)
+  if interval = options.delete('interval')
+    EM.add_periodic_timer(interval.to_i) do
+      puts "-" * 100
+      options[:keep_connection] = true
+      options[:retry_interval] = 3
+      Tengine::Event.fire(event_type_name, options)
+    end
+  else
+    EM.next_tick do
+      Tengine::Event.fire(event_type_name, options)
+    end
   end
 end
 
