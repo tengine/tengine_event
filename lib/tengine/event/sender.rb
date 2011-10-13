@@ -48,13 +48,15 @@ class Tengine::Event::Sender
     keep_connection ||= (opts.delete(:keep_connection) || mq_suite.config[:sender][:keep_connection])
     sender_retry_interval ||= (opts.delete(:retry_interval) || mq_suite.config[:sender][:retry_interval]).to_i
     sender_retry_count ||= (opts.delete(:retry_count) || mq_suite.config[:sender][:retry_count]).to_i
-      event =
-        case event_or_event_type_name
-        when Tengine::Event then event_or_event_type_name
-        else
-          Tengine::Event.new(opts.update(
-            :event_type_name => event_or_event_type_name.to_s))
-        end
+    event =
+      case event_or_event_type_name
+      when Tengine::Event then event_or_event_type_name
+      else
+        Tengine::Event.new(opts.update(
+          :event_type_name => event_or_event_type_name.to_s))
+      end
+    # このインスタンス変数を、インスタンス変数ではなく引数で持ち回るようにすると、うまく動かなくなってしまうので
+    # 暫定的にインスタンス変数のままで残します。
     @retrying_count = 0
     @success_published = false
     send_event_with_retry(event, keep_connection, sender_retry_interval, sender_retry_count, &block)
