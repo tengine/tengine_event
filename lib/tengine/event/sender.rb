@@ -77,7 +77,7 @@ class Tengine::Event::Sender
         block.yield if block_given?
         unless keep_connection
           logger = Tengine.respond_to?(:logger) ? Tengine.logger : nil
-          logger.warning("now disconnecting mq_suite.connection and EM.stop") if logger
+          logger.warn("now disconnecting mq_suite.connection and EM.stop by #{self.inspect}") if logger
           mq_suite.connection.disconnect { EM.stop }
         end
       end
