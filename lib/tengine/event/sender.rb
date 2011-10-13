@@ -50,23 +50,25 @@ class Tengine::Event::Sender
       # ここで渡される block としては、以下のように mq の connection クローズ と eventmachine の停止が考えられる
       # block = Proc.new(mq.connection.disconnect { EM.stop })
       mq_suite.exchange.publish(event.to_json, mq_suite.config[:exchange][:publish]) do
-        block.yield if block_given?
+        # 送信に成功した場合にのみ、このブロックは実行される
         @success_published = true
+        block.yield if block_given?
         mq_suite.connection.disconnect { EM.stop } unless keep_connection
       end
-      EM.add_timer(sender_retry_interval) {
+      EM.add_timer(sender_retry_interval) do
         if @retrying_count >= sender_retry_count
           raise "sender retry error"
         end
         @retrying_count += 1
         unless @success_published
-          # リトライ
           send_event_with_retry(event, keep_connection, sender_retry_interval, sender_retry_count, &block)
         end
-      }
+      end
     rescue => e
-      # amqp の例外以外は、この rescue でリトライされる
+      # amqpは送信に失敗しても例外を raise せず、 publish に渡されたブロックが実行されないだけ。
+      # 他の失敗による例外は、この rescue でリトライされる
       if @retrying_count >= sender_retry_count
+        # 送信に失敗しているのに自動的に切断してはいけません
         # mq_suite.connection.disconnect { EM.stop } unless keep_connection
         raise e
       else
