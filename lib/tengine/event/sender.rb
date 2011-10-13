@@ -39,7 +39,12 @@ class Tengine::Event::Sender
           Tengine::Event.new(opts.update(
             :event_type_name => event_or_event_type_name.to_s))
         end
+    send_event_with_retry(event, keep_connection, sender_retry_interval, sender_retry_count, &block)
+    event
+  end
 
+  private
+  def send_event_with_retry(event, keep_connection, sender_retry_interval, sender_retry_count, &block)
     @retrying_count ||= 0
     begin
       # ここで渡される block としては、以下のように mq の connection クローズ と eventmachine の停止が考えられる
@@ -56,7 +61,7 @@ class Tengine::Event::Sender
         @retrying_count += 1
         unless @success_published
           # リトライ
-          fire(event_or_event_type_name, options, &block)
+          send_event_with_retry(event, keep_connection, sender_retry_interval, sender_retry_count, &block)
         end
       }
     rescue => e
@@ -70,7 +75,6 @@ class Tengine::Event::Sender
         retry
       end
     end
-    event
   end
 
 end
