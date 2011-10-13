@@ -28,9 +28,6 @@ class Tengine::Event::Sender
   # @option options [Hash] :retry_count
   # @return [Tengine::Event]
   def fire(event_or_event_type_name, options = {}, &block)
-    @event_or_event_type_name = event_or_event_type_name
-    @options = options
-    @block = block
     opts ||= (options || {}).dup
     keep_connection ||= (opts.delete(:keep_connection) || mq_suite.config[:sender][:keep_connection])
     sender_retry_interval ||= (opts.delete(:retry_interval) || mq_suite.config[:sender][:retry_interval]).to_i
