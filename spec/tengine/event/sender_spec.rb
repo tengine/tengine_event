@@ -46,43 +46,30 @@ describe "Tengine::Event::Sender" do
       # exchange
       AMQP::Exchange.should_receive(:new).with(@mock_channel, "direct", "exchange1",
         :passive=>false, :durable=>true, :auto_delete=>false, :internal=>false, :nowait=>true).and_return(@mock_exchange)
-
-      @sender = Tengine::Event::Sender.new(:exchange => {:name => "exchange1"})
     end
 
-    it "JSON形式にserializeしてexchangeにpublishする" do
-      expected_event = Tengine::Event.new(:event_type_name => :foo, :key => "uniq_key")
-      @mock_exchange.should_receive(:publish).with(expected_event.to_json, :persistent => true)
-      EM.should_receive(:add_timer).with(1)
-      @sender.fire(:foo, :key => "uniq_key")
+    context "正常系" do
+      before do
+        @sender = Tengine::Event::Sender.new(:exchange => {:name => "exchange1"})
+      end
+
+      it "JSON形式にserializeしてexchangeにpublishする" do
+        expected_event = Tengine::Event.new(:event_type_name => :foo, :key => "uniq_key")
+        @mock_exchange.should_receive(:publish).with(expected_event.to_json, :persistent => true)
+        EM.should_receive(:add_timer).with(1)
+        @sender.fire(:foo, :key => "uniq_key")
+      end
+
+      it "Tengine::Eventオブジェクトを直接指定することも可能" do
+        expected_event = Tengine::Event.new(:event_type_name => :foo, :key => "uniq_key")
+        @mock_exchange.should_receive(:publish).with(expected_event.to_json, :persistent => true)
+        EM.should_receive(:add_timer).with(1)
+        @sender.fire(expected_event)
+      end
     end
 
-    it "Tengine::Eventオブジェクトを直接指定することも可能" do
-      expected_event = Tengine::Event.new(:event_type_name => :foo, :key => "uniq_key")
-      @mock_exchange.should_receive(:publish).with(expected_event.to_json, :persistent => true)
-      EM.should_receive(:add_timer).with(1)
-      @sender.fire(expected_event)
-    end
-  end
-
-  describe "fire_error" do
     context "AMQP::TCPConnectionFailed 以外のエラー" do
       before do
-        @mock_connection = mock(:connection)
-        @mock_channel = mock(:channel)
-        @mock_exchange = mock(:exchange)
-
-        # connection
-        AMQP.should_receive(:connect).with({:user=>"guest", :pass=>"guest", :vhost=>"/",
-            :logging=>false, :insist=>false, :host=>"localhost", :port=>5672}).and_return(@mock_connection)
-        @mock_connection.should_receive(:on_tcp_connection_loss)
-        @mock_connection.should_receive(:after_recovery)
-        # channel
-        AMQP::Channel.should_receive(:new).with(@mock_connection, {:prefetch => 1, :auto_recovery => true}).and_return(@mock_channel)
-        # exchange
-        AMQP::Exchange.should_receive(:new).with(@mock_channel, "direct", "exchange1",
-          :passive=>false, :durable=>true, :auto_delete=>false, :internal=>false, :nowait=>true).and_return(@mock_exchange)
-
         # テスト実行時に1秒×30回、掛かるのは困るので、default値を変更しています。
         @sender = Tengine::Event::Sender.new(:exchange => {:name => "exchange1"}, :sender => {:retry_interval => 0})
       end
