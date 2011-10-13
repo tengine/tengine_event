@@ -75,7 +75,11 @@ class Tengine::Event::Sender
         # 送信に成功した場合にのみ、このブロックは実行される
         @success_published = true
         block.yield if block_given?
-        mq_suite.connection.disconnect { EM.stop } unless keep_connection
+        unless keep_connection
+          logger = Tengine.respond_to?(:logger) ? Tengine.logger : nil
+          logger.warning("now disconnecting mq_suite.connection and EM.stop") if logger
+          mq_suite.connection.disconnect { EM.stop }
+        end
       end
       EM.add_timer(sender_retry_interval) do
         if @retrying_count >= sender_retry_count
