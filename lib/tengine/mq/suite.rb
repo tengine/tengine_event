@@ -70,47 +70,47 @@ class Tengine::Mq::Suite
 
   def connection(force = false, &block)
     if @connection.nil? || force
-    @connection = AMQP.connect(config[:connection], &block)
-    unless auto_reconnect_delay.nil?
-      @connection.on_tcp_connection_loss do |conn, settings|
-        conn.reconnect(false, auto_reconnect_delay.to_i)
+      @connection = AMQP.connect(config[:connection], &block)
+      unless auto_reconnect_delay.nil?
+        @connection.on_tcp_connection_loss do |conn, settings|
+          conn.reconnect(false, auto_reconnect_delay.to_i)
+        end
+        @connection.after_recovery do |conn, settings|
+          reset_channel
+        end
       end
-      @connection.after_recovery do |conn, settings|
-        reset_channel
-      end
-    end
     end
     @connection
   end
 
   def channel(force = false)
     if @channel.nil? || force
-    options = {
-      :prefetch => 1,
-      :auto_recovery => !auto_reconnect_delay.nil?,
-    }
-    @channel = AMQP::Channel.new(connection, options)
+      options = {
+        :prefetch => 1,
+        :auto_recovery => !auto_reconnect_delay.nil?,
+      }
+      @channel = AMQP::Channel.new(connection, options)
     end
     @channel
   end
 
   def exchange(force = false)
     if @exchange.nil? || force
-    c = config[:exchange].dup
-    c.delete(:publish)
-    exchange_type = c.delete(:type)
-    exchange_name = c.delete(:name)
-    @exchange = AMQP::Exchange.new(channel, exchange_type, exchange_name, c)
+      c = config[:exchange].dup
+      c.delete(:publish)
+      exchange_type = c.delete(:type)
+      exchange_name = c.delete(:name)
+      @exchange = AMQP::Exchange.new(channel, exchange_type, exchange_name, c)
     end
     @exchange
   end
 
   def queue(force = false)
     if @queue.nil? || force
-    c = config[:queue].dup
-    queue_name = c.delete(:name)
-    @queue = AMQP::Queue.new(channel, queue_name, c)
-    @queue.bind(exchange)
+      c = config[:queue].dup
+      queue_name = c.delete(:name)
+      @queue = AMQP::Queue.new(channel, queue_name, c)
+      @queue.bind(exchange)
     end
     @queue
   end
