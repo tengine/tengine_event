@@ -27,6 +27,7 @@ describe "Tengine::Mq::Suite" do
           :logging=>false, :insist=>false, :host=>"localhost", :port=>5672}).and_return(@mock_connection)
       @mock_connection.should_receive(:on_tcp_connection_loss)
       @mock_connection.should_receive(:after_recovery)
+      @mock_connection.should_receive(:on_closed)
       # channel
       AMQP::Channel.should_receive(:new).with(@mock_connection, :prefetch => 1, :auto_recovery => true).and_return(@mock_channel)
       # exchange
@@ -41,6 +42,7 @@ describe "Tengine::Mq::Suite" do
           :logging=>false, :insist=>false, :host=>"localhost", :port=>5672}).and_return(@mock_connection)
       @mock_connection.should_receive(:on_tcp_connection_loss)
       @mock_connection.should_receive(:after_recovery)
+      @mock_connection.should_receive(:on_closed)
       # channel
       AMQP::Channel.should_receive(:new).with(@mock_connection, :prefetch => 1, :auto_recovery => true).and_return(@mock_channel)
       # exchange
@@ -65,6 +67,7 @@ describe "Tengine::Mq::Suite" do
       @mock_connection.should_receive(:on_tcp_connection_loss).and_yield(@mock_connection, settings)
       @mock_connection.should_receive(:reconnect).with(false, 3)
       @mock_connection.should_receive(:after_recovery)
+      @mock_connection.should_receive(:on_closed)
       subject.connection
     end
 
@@ -78,6 +81,7 @@ describe "Tengine::Mq::Suite" do
           :logging=>false, :insist=>false, :host=>"localhost", :port=>5672}).twice.and_return(@mock_connection)
       @mock_connection.should_receive(:on_tcp_connection_loss).twice.and_yield(@mock_connection, settings)
       @mock_connection.should_receive(:reconnect).twice.with(false, 3)
+      @mock_connection.should_receive(:on_closed).twice
       @mock_connection.should_receive(:after_recovery).twice # .and_yield(@mock_connection, settings)
       # subject.should_receive(:reset_channel) # stack level too deep になってしまうので、コメントアウトしてます
       subject.connection(true)
@@ -88,6 +92,7 @@ describe "Tengine::Mq::Suite" do
           :logging=>false, :insist=>false, :host=>"localhost", :port=>5672}).and_return(@mock_connection)
       @mock_connection.should_receive(:on_tcp_connection_loss)
       @mock_connection.should_receive(:after_recovery)
+      @mock_connection.should_receive(:on_closed)
       subject.reset_channel
     end
 

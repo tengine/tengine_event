@@ -78,6 +78,10 @@ class Tengine::Mq::Suite
         @connection.after_recovery do |conn, settings|
           reset_channel
         end
+        @connection.on_closed do
+          @connection = nil
+          reset_channel
+        end
       end
     end
     @connection

@@ -11,6 +11,7 @@ describe "Tengine::Event::Sender" do
           :logging=>false, :insist=>false, :host=>"localhost", :port=>5672}).and_return(@mock_connection)
       @mock_connection.should_receive(:on_tcp_connection_loss)
       @mock_connection.should_receive(:after_recovery)
+      @mock_connection.should_receive(:on_closed)
     end
 
     context "mq_suite without config" do
@@ -41,6 +42,7 @@ describe "Tengine::Event::Sender" do
           :logging=>false, :insist=>false, :host=>"localhost", :port=>5672}).and_return(@mock_connection)
       @mock_connection.should_receive(:on_tcp_connection_loss)
       @mock_connection.should_receive(:after_recovery)
+      @mock_connection.should_receive(:on_closed)
       # channel
       AMQP::Channel.should_receive(:new).with(@mock_connection, :prefetch => 1, :auto_recovery => true).and_return(@mock_channel)
       # exchange
