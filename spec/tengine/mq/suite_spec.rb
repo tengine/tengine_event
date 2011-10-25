@@ -88,9 +88,6 @@ describe "Tengine::Mq::Suite" do
           :logging=>false, :insist=>false, :host=>"localhost", :port=>5672}).and_return(@mock_connection)
       @mock_connection.should_receive(:on_tcp_connection_loss)
       @mock_connection.should_receive(:after_recovery)
-      subject.should_receive(:channel).with(true)
-      subject.should_receive(:exchange).with(true)
-      subject.should_receive(:queue).with(true)
       subject.reset_channel
     end
 

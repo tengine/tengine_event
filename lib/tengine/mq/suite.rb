@@ -2,12 +2,9 @@
 require 'tengine/mq'
 
 require 'active_support/core_ext/hash/keys'
-require 'active_support/memoizable'
 require 'amqp'
 
 class Tengine::Mq::Suite
-  # memoize については http://wota.jp/ac/?date=20081025#p11 などを参照してください
-  extend ActiveSupport::Memoizable
 
   attr_reader :config
   attr_reader :auto_reconnect_delay
@@ -71,48 +68,57 @@ class Tengine::Mq::Suite
     }
   }
 
-  def connection(&block)
-    result = AMQP.connect(config[:connection], &block)
+  def connection(force = false, &block)
+    if @connection.nil? || force
+    @connection = AMQP.connect(config[:connection], &block)
     unless auto_reconnect_delay.nil?
-      result.on_tcp_connection_loss do |conn, settings|
+      @connection.on_tcp_connection_loss do |conn, settings|
         conn.reconnect(false, auto_reconnect_delay.to_i)
       end
-      result.after_recovery do |conn, settings|
+      @connection.after_recovery do |conn, settings|
         reset_channel
       end
     end
-    result
+    end
+    @connection
   end
 
-  def channel
+  def channel(force = false)
+    if @channel.nil? || force
     options = {
       :prefetch => 1,
       :auto_recovery => !auto_reconnect_delay.nil?,
     }
-    AMQP::Channel.new(connection, options)
+    @channel = AMQP::Channel.new(connection, options)
+    end
+    @channel
   end
 
-  def exchange
+  def exchange(force = false)
+    if @exchange.nil? || force
     c = config[:exchange].dup
     c.delete(:publish)
     exchange_type = c.delete(:type)
     exchange_name = c.delete(:name)
-    AMQP::Exchange.new(channel, exchange_type, exchange_name, c)
+    @exchange = AMQP::Exchange.new(channel, exchange_type, exchange_name, c)
+    end
+    @exchange
   end
 
-  def queue
+  def queue(force = false)
+    if @queue.nil? || force
     c = config[:queue].dup
     queue_name = c.delete(:name)
-    queue = AMQP::Queue.new(channel, queue_name, c)
-    queue.bind(exchange)
-    queue
+    @queue = AMQP::Queue.new(channel, queue_name, c)
+    @queue.bind(exchange)
+    end
+    @queue
   end
-  memoize :connection, :channel, :exchange, :queue
 
   def reset_channel
-    channel(true)
-    exchange(true)
-    queue(true)
+    @channel = nil
+    @exchange = nil
+    @queue = nil
   end
 
 
