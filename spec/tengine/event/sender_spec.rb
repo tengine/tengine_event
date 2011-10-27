@@ -56,10 +56,11 @@ describe "Tengine::Event::Sender" do
       end
 
       it "JSON形式にserializeしてexchangeにpublishする" do
-        expected_event = Tengine::Event.new(:event_type_name => :foo, :key => "uniq_key")
+        occurred_at = Time.now
+        expected_event = Tengine::Event.new(:event_type_name => :foo, :key => "uniq_key", :occurred_at => occurred_at)
         @mock_exchange.should_receive(:publish).with(expected_event.to_json, :persistent => true)
         EM.should_receive(:add_timer).with(1)
-        @sender.fire(:foo, :key => "uniq_key")
+        @sender.fire(:foo, :key => "uniq_key", :occurred_at => occurred_at)
       end
 
       it "Tengine::Eventオブジェクトを直接指定することも可能" do
