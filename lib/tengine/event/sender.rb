@@ -10,9 +10,9 @@ class Tengine::Event::Sender
       @source = source.is_a?(RetryError) ? source.source : source
     end
     def message
-      result = "event %s has be tried to send %d times." % [event, retry_count]
+      result = "failed %d time(s) to send event %s." % [retry_count, event]
       if @source
-        result << " The last source exception was #{@source.inspect}"
+        result << "  The last source exception was #{@source.inspect}"
       end
       result
     end
@@ -30,6 +30,13 @@ class Tengine::Event::Sender
       @mq_suite = Tengine::Mq::Suite.new(config_or_mq_suite)
     end
     @default_keep_connection = (@mq_suite.config[:sender] || {})[:keep_connection]
+  end
+
+  @@retry_counts = Hash.new
+  @@finalizer = lambda do |id| @@retry_counts.delete id end
+
+  def __instrument # test backdoor
+    @@retry_counts.size
   end
 
   # publish an event message to AMQP exchange
@@ -58,51 +65,44 @@ class Tengine::Event::Sender
         Tengine::Event.new(opts.update(
           :event_type_name => event_or_event_type_name.to_s))
       end
-    # このインスタンス変数を、インスタンス変数ではなく引数で持ち回るようにすると、うまく動かなくなってしまうので
-    # 暫定的にインスタンス変数のままで残します。
-    @retrying_count = 0
-    @success_published = false
+    ObjectSpace.define_finalizer event, @@finalizer
     send_event_with_retry(event, keep_connection, sender_retry_interval, sender_retry_count, &block)
     event
   end
 
   private
   def send_event_with_retry(event, keep_connection, sender_retry_interval, sender_retry_count, &block)
-    begin
-      # ここで渡される block としては、以下のように mq の connection クローズ と eventmachine の停止が考えられる
-      # block = Proc.new(mq.connection.disconnect { EM.stop })
-      mq_suite.exchange.publish(event.to_json, mq_suite.config[:exchange][:publish]) do
-        # 送信に成功した場合にのみ、このブロックは実行される
-        @success_published = true
-        block.yield if block_given?
-        unless keep_connection
-          logger = Tengine.respond_to?(:logger) ? Tengine.logger : nil
-          logger.warn("now disconnecting mq_suite.connection and EM.stop by #{self.inspect}") if logger
-          mq_suite.connection.disconnect { EM.stop }
-        end
+    s, x, n = false, false, @@retry_counts[event.object_id] || 0
+    raise RetryError.new(event, n) if n > sender_retry_count
+    @@retry_counts[event.object_id] = n + 1
+    # ここで渡される block としては、以下のように mq の connection クローズ と eventmachine の停止が考えられる
+    # block = Proc.new(mq.connection.disconnect { EM.stop })
+    mq_suite.exchange.publish(event.to_json, mq_suite.config[:exchange][:publish]) do
+      # 送信に成功した場合にのみ、このブロックは実行される
+      s = true
+      @@retry_counts.delete event.object_id # eager deletion
+      block.yield if block_given?
+      unless keep_connection
+        logger = Tengine.respond_to?(:logger) ? Tengine.logger : nil
+        logger.warn("now disconnecting mq_suite.connection and EM.stop by #{self.inspect}") if logger
+        mq_suite.connection.disconnect { EM.stop }
       end
+    end
+  rescue => e
+    # amqpは送信に失敗しても例外を raise せず、 publish に渡されたブロックが実行されないだけ。
+    # 他の失敗による例外は、この rescue でリトライされる
+    if n >= sender_retry_count
+      # 送信に失敗しているのに自動的に切断してはいけません
+      # mq_suite.connection.disconnect { EM.stop } unless keep_connection
+      x = true
+      @@retry_counts.delete event.object_id # eager deletion
+      raise RetryError.new(event, n, e)
+    end
+  ensure
+    if not s and not x and n <= sender_retry_count
       EM.add_timer(sender_retry_interval) do
-        if @retrying_count >= sender_retry_count
-          raise RetryError.new(event, @retrying_count)
-        end
-        @retrying_count += 1
-        unless @success_published
-          send_event_with_retry(event, keep_connection, sender_retry_interval, sender_retry_count, &block)
-        end
-      end
-    rescue => e
-      # amqpは送信に失敗しても例外を raise せず、 publish に渡されたブロックが実行されないだけ。
-      # 他の失敗による例外は、この rescue でリトライされる
-      if @retrying_count >= sender_retry_count
-        # 送信に失敗しているのに自動的に切断してはいけません
-        # mq_suite.connection.disconnect { EM.stop } unless keep_connection
-        raise RetryError.new(event, @retrying_count, e)
-      else
-        @retrying_count += 1
-        sleep(sender_retry_interval)
-        retry
+        send_event_with_retry(event, keep_connection, sender_retry_interval, sender_retry_count, &block)
       end
     end
   end
-
 end
