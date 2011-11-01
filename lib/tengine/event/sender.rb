@@ -83,7 +83,7 @@ class Tengine::Event::Sender
 
   private
   def send_event_with_retry(event, keep_connection, sender_retry_interval, sender_retry_count, &block)
-    @logger.debug("send_event_with_retry(#{event.inspect}) called")
+    @logger.debug("send_event_with_retry(#{event.event_type_name}) called")
     s, x, n = false, false, @@retry_counts[event.object_id] || 0
     raise RetryError.new(event, n) if n > sender_retry_count
     @@retry_counts[event.object_id] = n + 1
@@ -100,7 +100,7 @@ class Tengine::Event::Sender
       end
     end
   rescue => e
-    @logger.warn("send_event_with_retry(#{event.inspect}) raised [#{e.class.name}] #{e.message}")
+    @logger.warn("send_event_with_retry(#{event.event_type_name}) retried #{n} times but raised [#{e.class.name}] #{e.message}")
     # amqpは送信に失敗しても例外を raise せず、 publish に渡されたブロックが実行されないだけ。
     # 他の失敗による例外は、この rescue でリトライされる
     if n >= sender_retry_count
@@ -108,10 +108,12 @@ class Tengine::Event::Sender
       # mq_suite.connection.disconnect { EM.stop } unless keep_connection
       x = true
       @@retry_counts.delete event.object_id # eager deletion
+      @logger.warn("send_event_with_retry(#{event.event_type_name}) raising [RetryError] #{event.inspect}")
       raise RetryError.new(event, n, e)
     end
   ensure
     if not s and not x and n <= sender_retry_count
+      @logger.warn("send_event_with_retry(#{event.event_type_name}) retried #{n} times then sending again until #{sender_retry_count} times")
       EM.add_timer(sender_retry_interval) do
         send_event_with_retry(event, keep_connection, sender_retry_interval, sender_retry_count, &block)
       end
