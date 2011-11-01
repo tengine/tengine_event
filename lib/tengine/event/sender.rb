@@ -60,6 +60,7 @@ class Tengine::Event::Sender
   # @option options [Hash] :retry_count
   # @return [Tengine::Event]
   def fire(event_or_event_type_name, options = {}, &block)
+    @logger.info("fire(#{event_or_event_type_name.inspect}, #{options}) called")
     opts ||= (options || {}).dup
     keep_connection ||= (opts.delete(:keep_connection) || default_keep_connection)
     sender_retry_interval ||= (opts.delete(:retry_interval) || mq_suite.config[:sender][:retry_interval]).to_i
@@ -74,10 +75,15 @@ class Tengine::Event::Sender
     ObjectSpace.define_finalizer event, @@finalizer
     send_event_with_retry(event, keep_connection, sender_retry_interval, sender_retry_count, &block)
     event
+    @logger.info("fire(#{event_or_event_type_name.inspect}, #{options}) complete")
+  rescue Exception => e
+    @logger.warn("fire(#{event_or_event_type_name.inspect}, #{options}) raised [#{e.class.name}] #{e.message}")
+    raise e
   end
 
   private
   def send_event_with_retry(event, keep_connection, sender_retry_interval, sender_retry_count, &block)
+    @logger.debug("send_event_with_retry(#{event.inspect}) called")
     s, x, n = false, false, @@retry_counts[event.object_id] || 0
     raise RetryError.new(event, n) if n > sender_retry_count
     @@retry_counts[event.object_id] = n + 1
@@ -94,6 +100,7 @@ class Tengine::Event::Sender
       end
     end
   rescue => e
+    @logger.warn("send_event_with_retry(#{event.inspect}) raised [#{e.class.name}] #{e.message}")
     # amqpは送信に失敗しても例外を raise せず、 publish に渡されたブロックが実行されないだけ。
     # 他の失敗による例外は、この rescue でリトライされる
     if n >= sender_retry_count
