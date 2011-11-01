@@ -1,6 +1,8 @@
 # -*- coding: utf-8 -*-
 require 'tengine/event'
 
+require 'active_support/core_ext/array/extract_options'
+
 class Tengine::Event::Sender
 
   class RetryError < StandardError
@@ -20,16 +22,20 @@ class Tengine::Event::Sender
   end
 
   attr_reader :mq_suite
+  attr_reader :logger
   attr_accessor :default_keep_connection
 
-  def initialize(config_or_mq_suite = nil)
+  def initialize(*args)
+    options = args.extract_options!
+    config_or_mq_suite = args.first
     case config_or_mq_suite
     when Tengine::Mq::Suite then
       @mq_suite = config_or_mq_suite
-    when nil, Hash then
-      @mq_suite = Tengine::Mq::Suite.new(config_or_mq_suite)
+    when nil then
+      @mq_suite = Tengine::Mq::Suite.new(options)
     end
     @default_keep_connection = (@mq_suite.config[:sender] || {})[:keep_connection]
+    @logger = options[:logger] || Tengine::NullLogger.new
   end
 
   @@retry_counts = Hash.new
@@ -83,8 +89,7 @@ class Tengine::Event::Sender
       @@retry_counts.delete event.object_id # eager deletion
       block.yield if block_given?
       unless keep_connection
-        logger = Tengine.respond_to?(:logger) ? Tengine.logger : nil
-        logger.warn("now disconnecting mq_suite.connection and EM.stop by #{self.inspect}") if logger
+        @logger.warn("now disconnecting mq_suite.connection and EM.stop by #{self.inspect}")
         mq_suite.connection.disconnect { EM.stop }
       end
     end
