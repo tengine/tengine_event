@@ -188,7 +188,6 @@ class Tengine::Mq::Suite
   end
 
   def fire sender, event, opts, retryc, block # :nodoc:
-    tag = channel.publisher_index
     exchange.publish event.to_json, @config[:exchange][:publish]
   rescue => e
     # exchange.publish はたとえば RuntimeError を raise したりするようだ
@@ -201,7 +200,8 @@ class Tengine::Mq::Suite
     end
   else
     if @tx_pending_events
-      e = @@tx_pending_event.new tag, sender, event, opts, retryc, block
+      @tag += 1
+      e = @@tx_pending_event.new @tag, sender, event, opts, retryc, block
       @tx_pending_events.push e
     else
       EM.next_tick do
@@ -244,30 +244,28 @@ class Tengine::Mq::Suite
       unless channel.uses_publisher_confirmations?
         channel.confirm_select do
           @tx_pending_events = Array.new
+          @tag = 2
           channel.on_ack do |ack|
             unless @tx_pending_events.empty?
               f = false
               n = ack.delivery_tag
               if ack.multiple
-                while @tx_pending_events.first.tag <= n do
+                b4, @tx_pending_events = @tx_pending_events.partition {|i| i.tag <= n }
+                f = b4.inject(false) {|r, e| r | e.opts[:keep_connection] }
+                b4.each_next_tick {|e| e.block.call if e.block }
+              else
+                b4, @tx_pending_events = @tx_pending_events.partition {|i| i.tag < n }
+                f = !b4.empty?
+                b4.each_next_tick {|e| e.sender.fire e.event, e.opts, e.retry + 1, &e.block }
+                if @tx_pending_events.empty?
+                  # the packet in quesion is lost?
+                else
                   e = @tx_pending_events.shift
                   f |= e.opts[:keep_connection]
                   if b = e.block
                     EM.next_tick do
                       b.call
                     end
-                  end
-                end
-              else
-                while @tx_pending_events.first.tag < n do
-                  e = @tx_pending_events.shift
-                  e.sender.fire e.event, e.opts, e.retry + 1, &e.block
-                end
-                e = @tx_pending_events.shift
-                f |= e.opts[:keep_connection]
-                if b = e.block
-                  EM.next_tick do
-                    b.call
                   end
                 end
               end

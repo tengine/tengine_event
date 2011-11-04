@@ -67,4 +67,10 @@ class Tengine::Event::Sender
   def pending_events
     @mq_suite.pending_events_for self
   end
+
+  def wait_for_connection
+    mq_suite.wait_for_connection do
+      yield
+    end
+  end
 end
