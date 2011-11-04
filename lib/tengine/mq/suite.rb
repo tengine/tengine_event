@@ -5,6 +5,20 @@ require 'active_support/core_ext/hash/keys'
 require 'amqp'
 require 'amqp/extensions/rabbitmq'
 
+module Enumerable
+  def each_next_tick
+    raise ArgumentError, "no block given" unless block_given?
+    self.reverse.inject(->{}) do |block, obj|
+      lambda do
+        EM.next_tick do
+          yield obj
+          block.call
+        end
+      end
+    end.call
+  end
+end
+
 # MQと到達保証について by @shyouhei on 2nd Nov., 2011.
 #
 # 端的に言ってAMQPプロトコルにはパケットの到達保証が、ありません。
