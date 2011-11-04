@@ -269,7 +269,11 @@ describe "Tengine::Event" do
       @mock_connection.should_receive(:on_tcp_connection_loss)
       @mock_connection.should_receive(:after_recovery)
       @mock_connection.should_receive(:on_closed)
+      @mock_connection.stub(:connected?).and_return(true)
+      @mock_connection.stub(:disconnect).and_yield
+      @mock_connection.stub(:server_capabilities).and_return(nil)
       AMQP::Channel.should_receive(:new).with(@mock_connection, :prefetch => 1, :auto_recovery => true).and_return(@mock_channel)
+      @mock_channel.stub(:publisher_index).and_return(nil)
       AMQP::Exchange.should_receive(:new).with(@mock_channel, "direct", "exchange1",
         :passive=>false, :durable=>true, :auto_delete=>false, :internal=>false, :nowait=>true).and_return(@mock_exchange)
     end
@@ -277,7 +281,6 @@ describe "Tengine::Event" do
     it "JSON形式にserializeしてexchangeにpublishする" do
       expected_event = Tengine::Event.new(:event_type_name => :foo, :key => "uniq_key")
       @mock_exchange.should_receive(:publish).with(expected_event.to_json, "persistent" => true)
-      EM.should_receive(:add_timer).with(1)
       Tengine::Event.fire(:foo, :key => "uniq_key")
     end
   end

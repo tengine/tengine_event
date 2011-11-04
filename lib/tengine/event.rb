@@ -177,4 +177,8 @@ class Tengine::Event
     end
   end
 
+  def transmitted?
+    default_sender.mq_suite.pending? self
+  end
+
 end
