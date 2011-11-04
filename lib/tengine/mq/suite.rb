@@ -151,6 +151,7 @@ class Tengine::Mq::Suite
       exchange_type = c.delete(:type)
       exchange_name = c.delete(:name)
       @exchange = AMQP::Exchange.new(channel, exchange_type, exchange_name, c)
+      setup_confirmation
     end
     @exchange
   end
@@ -173,7 +174,6 @@ class Tengine::Mq::Suite
   end
 
   def fire sender, event, opts, retryc, block # :nodoc:
-    setup_confirmation
     tag = channel.publisher_index
     exchange.publish event.to_json, @config[:exchange][:publish]
   rescue => e
@@ -209,13 +209,21 @@ class Tengine::Mq::Suite
     @tx_pending_events and @tx_pending_events.any? {|i| i.event == event }
   end
 
+  def wait_for_connection &block
+    defer = proc do
+#       Tengine.logger.info "waiting for MQ to be set up..."
+      sleep 0.1 until connection.connected?
+    end
+    EM.defer defer, block
+  end
+
   private
 
   @@tx_pending_event = Struct.new :tag, :sender, :event, :opts, :retry, :block
 
   def setup_confirmation
     return if @tx_pending_events
-    raise "It seems the message queue is absent." unless connection.connected?
+    raise "It seems the message queue is absent.  Consider using Suite#wait_for_connection" unless connection.connected?
 
     cap = connection.server_capabilities
     if cap and cap["publisher_confirms"] then
