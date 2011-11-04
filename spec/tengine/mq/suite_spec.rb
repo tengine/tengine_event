@@ -28,6 +28,8 @@ describe "Tengine::Mq::Suite" do
       @mock_connection.should_receive(:on_tcp_connection_loss)
       @mock_connection.should_receive(:after_recovery)
       @mock_connection.should_receive(:on_closed)
+      @mock_connection.stub(:connected?).and_return(true)
+      @mock_connection.stub(:server_capabilities).and_return(nil)
       # channel
       AMQP::Channel.should_receive(:new).with(@mock_connection, :prefetch => 1, :auto_recovery => true).and_return(@mock_channel)
       # exchange
@@ -43,6 +45,8 @@ describe "Tengine::Mq::Suite" do
       @mock_connection.should_receive(:on_tcp_connection_loss)
       @mock_connection.should_receive(:after_recovery)
       @mock_connection.should_receive(:on_closed)
+      @mock_connection.stub(:connected?).and_return(true)
+      @mock_connection.stub(:server_capabilities).and_return(nil)
       # channel
       AMQP::Channel.should_receive(:new).with(@mock_connection, :prefetch => 1, :auto_recovery => true).and_return(@mock_channel)
       # exchange

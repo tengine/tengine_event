@@ -3,6 +3,51 @@ require 'tengine/mq'
 
 require 'active_support/core_ext/hash/keys'
 require 'amqp'
+require 'amqp/extensions/rabbitmq'
+
+# MQと到達保証について by @shyouhei on 2nd Nov., 2011.
+#
+# 端的に言ってAMQPプロトコルにはパケットの到達保証が、ありません。
+#
+# したがってAMQP::Exchangeを普通に使うだけでは、fireしたイベントがどこまで確実に
+# 届くかが保証されません。
+#
+# この問題に対してRabbitMQは、それ単体では全体の到達保証をしませんが、以下の追加
+# 手段を提供してくれています。
+#
+# * RabbitMQ自体の実装の努力により、RabbitMQのサーバにデータが到達して以降は、
+#   RabbitMQが到達性を保証してくれます
+#
+# * AMQPプロトコルを勝手に拡張していて、RabbitMQのサーバにパケットが届いたことを
+#   ackしてくれるようにできます
+#
+# したがってAMQPブローカーにRabbitMQを使っている限りは、MQサーバにパケットが到着
+# したことを、クライアント側でackを読みながら確認することで、全体としての到達保
+# 証が可能になるわけです。
+#
+# Tengine::Event::Sender#fireを実行すると、イベントを送信して、このackを確認す
+# る部分までを自動的に行います。したがって所謂fire-and-forgetの動作が達成されて
+# います。ただし、以下のように制限があります
+#
+# * AMQP gemの制約上、おおむね非同期的に動作します。つまり、fireは送信を予約する
+#   だけで、実のところ送信が終わるのは(再送等で)fireが終了してからだいぶ先の話に
+#   なります。
+#
+# * あるときだれかが EM.stop すると、それ以上はackを読めなくなり、再送信ができな
+#   くなります。
+#
+# * そうは言ってもEM.stopできないとプロセスが終了できないので、stop可能かどうか
+#   を調査できるようにしました(新API)。
+#
+#   * fireメソッドの戻り値のTengine::Eventに新メソッド #transmitted? が追加になっ
+#     ていますので個別のイベントの送信が終わったかどうかはこれで確認できます。
+#
+#   * senderが送信中のイベント一覧は sender.pending_events で入手できます
+#
+#   * もうsenderが送り終わったらそのままEM.stopしてよい場合(だいたいそうだと思
+#     いますが)のために、 sender.stop_after_transmission があります
+#
+#   APIは今後も使い勝手のために追加する可能性があります
 
 class Tengine::Mq::Suite
 
@@ -19,6 +64,7 @@ class Tengine::Mq::Suite
     # 一度も、AMQP.connectを実行する前に、connection に関する例外が発生すると、
     # 再接続などのハンドリングができないので、初期化時に connection への接続までを行います。
     connection
+    @tx_pending_events = nil
   end
 
   DEFAULT_CONFIG= {
@@ -123,7 +169,105 @@ class Tengine::Mq::Suite
     @channel = nil
     @exchange = nil
     @queue = nil
+    @tx_pending_events = nil
   end
 
+  def fire sender, event, opts, retryc, block # :nodoc:
+    setup_confirmation
+    tag = channel.publisher_index
+    exchange.publish event.to_json, @config[:exchange][:publish]
+  rescue => e
+    # exchange.publish はたとえば RuntimeError を raise したりするようだ
+    if retryc >= opts[:retry_count]
+      raise ::Tengine::Event::Sender::RetryError.new(event, retryc, e)
+    else
+      EM.add_timer opts[:retry_interval] do
+        fire sender, event, opts, retryc + 1, block
+      end
+    end
+  else
+    if @tx_pending_events
+      e = @@tx_pending_event.new tag, sender, event, opts, retryc, block
+      @tx_pending_events.push e
+    else
+      EM.next_tick do
+        block.call if block
+        unless opts[:keep_connection]
+          connection.disconnect do
+            EM.stop
+          end
+        end
+      end
+    end
+  end
 
+  def pending_events_for sender # :nodoc:
+    (@tx_pending_events||[]).select {|i| i.sender == sender }.map {|i| i.event }
+  end
+
+  def pending? event # :nodoc:
+    @tx_pending_events and @tx_pending_events.any? {|i| i.event == event }
+  end
+
+  private
+
+  @@tx_pending_event = Struct.new :tag, :sender, :event, :opts, :retry, :block
+
+  def setup_confirmation
+    return if @tx_pending_events
+    raise "It seems the message queue is absent." unless connection.connected?
+
+    cap = connection.server_capabilities
+    if cap and cap["publisher_confirms"] then
+      unless channel.uses_publisher_confirmations?
+        channel.confirm_select do
+          @tx_pending_events = Array.new
+          channel.on_ack do |ack|
+            unless @tx_pending_events.empty?
+              f = false
+              n = ack.delivery_tag
+              if ack.multiple
+                while @tx_pending_events.first.tag <= n do
+                  e = @tx_pending_events.shift
+                  f |= e.opts[:keep_connection]
+                  if b = e.block
+                    EM.next_tick do
+                      b.call
+                    end
+                  end
+                end
+              else
+                while @tx_pending_events.first.tag < n do
+                  e = @tx_pending_events.shift
+                  e.sender.fire e.event, e.opts, e.retry + 1, &e.block
+                end
+                e = @tx_pending_events.shift
+                f |= e.opts[:keep_connection]
+                if b = e.block
+                  EM.next_tick do
+                    b.call
+                  end
+                end
+              end
+              if f == false and @tx_pending_events.empty?
+                @connection.disconnect do
+                  EM.stop
+                end
+              end
+            end
+          end
+        end
+      end
+    elsif !$__tengine_mq_suite_warning_shown__
+      $__tengine_mq_suite_warning_shown__ = true
+      STDOUT <<<<-end.gsub(/^\t+/,'')
+
+The  message  queue  broker   you  are  connecting   lacks  Publisher [BEWARE!]
+Confirmation capability,  so we cannot make  sure your events  are in [BEWARE!]
+fact reaching  to one  of the Tengine  cores.  We strongly  recommend [BEWARE!]
+you to use a relatively recent version of RabbitMQ.                   [BEWARE!]
+
+      end
+    end
+  end
 end

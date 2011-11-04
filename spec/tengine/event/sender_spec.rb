@@ -43,8 +43,12 @@ describe "Tengine::Event::Sender" do
       @mock_connection.should_receive(:on_tcp_connection_loss)
       @mock_connection.should_receive(:after_recovery)
       @mock_connection.should_receive(:on_closed)
+      @mock_connection.stub(:connected?).and_return(true)
+      @mock_connection.stub(:disconnect).and_yield
+      @mock_connection.stub(:server_capabilities).and_return(nil)
       # channel
       AMQP::Channel.should_receive(:new).with(@mock_connection, :prefetch => 1, :auto_recovery => true).and_return(@mock_channel)
+      @mock_channel.stub(:publisher_index).and_return(nil)
       # exchange
       AMQP::Exchange.should_receive(:new).with(@mock_channel, "direct", "exchange1",
         :passive=>false, :durable=>true, :auto_delete=>false, :internal=>false, :nowait=>true).and_return(@mock_exchange)
@@ -73,10 +77,11 @@ describe "Tengine::Event::Sender" do
       context "publish後に特定の処理を行う" do
         it "カスタム処理" do
           expected_event = Tengine::Event.new(:event_type_name => :foo, :key => "uniq_key")
-          @mock_exchange.should_receive(:publish).with(expected_event.to_json, :persistent => true).and_yield
+          @mock_exchange.should_receive(:publish).with(expected_event.to_json, :persistent => true)
           @mock_connection.should_receive(:disconnect).and_yield
           EM.stub(:add_timer).with(1)
           EM.should_receive(:stop)
+          EM.stub(:next_tick).and_yield
           block_called = false
           @sender.fire(expected_event){ block_called = true }
           block_called.should == true
@@ -84,10 +89,11 @@ describe "Tengine::Event::Sender" do
 
         it "自動で切断せずに、接続を維持する" do
           expected_event = Tengine::Event.new(:event_type_name => :foo, :key => "uniq_key")
-          @mock_exchange.should_receive(:publish).with(expected_event.to_json, :persistent => true).and_yield
+          @mock_exchange.should_receive(:publish).with(expected_event.to_json, :persistent => true)
           @mock_connection.should_not_receive(:disconnect)
           EM.stub(:add_timer).with(1)
           EM.should_not_receive(:stop)
+          EM.stub(:next_tick).and_yield
           block_called = false
           @sender.default_keep_connection = true
           @sender.fire(expected_event){ block_called = true }
@@ -104,8 +110,8 @@ describe "Tengine::Event::Sender" do
       end
       it "メッセージ送信ができなくてpublishに渡したブロックが呼び出されず、インターバルが過ぎて、EM.add_timeに渡したブロックが呼び出された場合" do
         expected_event = Tengine::Event.new(:event_type_name => :foo, :key => "uniq_key")
-        @mock_exchange.should_receive(:publish).with(expected_event.to_json, :persistent => true).exactly(31).times
-        EM.should_receive(:add_timer).with(0).exactly(31).times.and_yield
+        @mock_exchange.should_receive(:publish).with(expected_event.to_json, :persistent => true).exactly(31).times.and_raise(StandardError)
+        EM.stub(:add_timer).with(0).exactly(31).times.and_yield
         EM.stub(:add_timer).with(0, an_instance_of(Proc)) {|k, v| v.call }
         block_called = false
         expect{
@@ -218,7 +224,7 @@ describe "Tengine::Event::Sender" do
           end
         rescue Tengine::Event::Sender::RetryError => e
           GC.start
-          subject.__instrument.should < n
+          subject.pending_events.size.should < n
         end
       end
     end
