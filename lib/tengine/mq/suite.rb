@@ -246,7 +246,7 @@ class Tengine::Mq::Suite
       unless channel.uses_publisher_confirmations?
         channel.confirm_select do
           @tx_pending_events = Array.new
-          @tag = 2
+          @tag = 1
           channel.on_ack do |ack|
             unless @tx_pending_events.empty?
               f = false
