@@ -29,6 +29,17 @@ describe "Tengine::Event::Sender" do
       subject{ Tengine::Event::Sender.new(:exchange => {:name => "another_exhange"}).mq_suite }
       it{ subject.config[:exchange][:name].should == "another_exhange" }
     end
+
+    context "with mq_suite" do
+      before{ @mq_suite = Tengine::Mq::Suite.new }
+      it{ Tengine::Event::Sender.new( @mq_suite ) }
+    end
+
+    context "with mq_suite and options" do
+      before{ @mq_suite = Tengine::Mq::Suite.new }
+      it{ Tengine::Event::Sender.new( @mq_suite, :logger => mock(:logger) ) }
+    end
+
   end
 
   describe :fire do
