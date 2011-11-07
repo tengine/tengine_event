@@ -185,6 +185,7 @@ class Tengine::Mq::Suite
     @exchange = nil
     @queue = nil
     @tx_pending_events = nil
+    @publisher_confirmation_initiated = false
   end
 
   def fire sender, event, opts, retryc, block # :nodoc:
@@ -227,7 +228,7 @@ class Tengine::Mq::Suite
   def wait_for_connection &block
     defer = proc do
 #       Tengine.logger.info "waiting for MQ to be set up..."
-      sleep 0.1 until connection.connected?
+      sleep 0.1 until instance_variable_get("@publisher_confirmation_initiated")
     end
     EM.defer defer, block
   end
@@ -238,7 +239,7 @@ class Tengine::Mq::Suite
   @@all_pending_events = Hash.new do |h, k| h.store k, 0 end
 
   def setup_confirmation
-    return if @tx_pending_events
+    return if @publisher_confirmation_initiated
     raise "It seems the message queue is absent.  Consider using Suite#wait_for_connection" unless connection.connected?
 
     cap = connection.server_capabilities
@@ -247,6 +248,7 @@ class Tengine::Mq::Suite
         channel.confirm_select do
           @tx_pending_events = Array.new
           @tag = 1
+          @publisher_confirmation_initiated = true
           channel.on_ack do |ack|
             unless @tx_pending_events.empty?
               f = false
@@ -285,15 +287,18 @@ class Tengine::Mq::Suite
           end
         end
       end
-    elsif !$__tengine_mq_suite_warning_shown__
-      $__tengine_mq_suite_warning_shown__ = true
-      STDOUT <<<<-end.gsub(/^\t+/,'')
+    else
+      @publisher_confirmation_initiated = true # initiated, but not available
+      if !$__tengine_mq_suite_warning_shown__
+        $__tengine_mq_suite_warning_shown__ = true
+        STDOUT <<<<-end.gsub(/^\t+/,'')
 
 The  message  queue  broker   you  are  connecting   lacks  Publisher [BEWARE!]
 Confirmation capability,  so we cannot make  sure your events  are in [BEWARE!]
 fact reaching  to one  of the Tengine  cores.  We strongly  recommend [BEWARE!]
 you to use a relatively recent version of RabbitMQ.                   [BEWARE!]
 
+        end
       end
     end
   end
