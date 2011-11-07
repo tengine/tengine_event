@@ -203,6 +203,7 @@ class Tengine::Mq::Suite
       @tag += 1
       e = @@tx_pending_event.new @tag, sender, event, opts, retryc, block
       @tx_pending_events.push e
+      @@all_pending_events[event] += 1
     else
       EM.next_tick do
         block.call if block
@@ -219,8 +220,8 @@ class Tengine::Mq::Suite
     (@tx_pending_events||[]).select {|i| i.sender == sender }.map {|i| i.event }
   end
 
-  def pending? event # :nodoc:
-    @tx_pending_events and @tx_pending_events.any? {|i| i.event == event }
+  def self.pending? event # :nodoc:
+    @@all_pending_events.has_key? event
   end
 
   def wait_for_connection &block
@@ -234,6 +235,7 @@ class Tengine::Mq::Suite
   private
 
   @@tx_pending_event = Struct.new :tag, :sender, :event, :opts, :retry, :block
+  @@all_pending_events = Hash.new do |h, k| h.store k, 0 end
 
   def setup_confirmation
     return if @tx_pending_events
@@ -249,26 +251,31 @@ class Tengine::Mq::Suite
             unless @tx_pending_events.empty?
               f = false
               n = ack.delivery_tag
+              ok = []
+              ng = []
               if ack.multiple
-                b4, @tx_pending_events = @tx_pending_events.partition {|i| i.tag <= n }
-                f = b4.inject(false) {|r, e| r | e.opts[:keep_connection] }
-                b4.each_next_tick {|e| e.block.call if e.block }
+                ok, @tx_pending_events = @tx_pending_events.partition {|i| i.tag <= n }
               else
-                b4, @tx_pending_events = @tx_pending_events.partition {|i| i.tag < n }
-                f = !b4.empty?
-                b4.each_next_tick {|e| e.sender.fire e.event, e.opts, e.retry + 1, &e.block }
+                ng, @tx_pending_events = @tx_pending_events.partition {|i| i.tag < n }
                 if @tx_pending_events.empty?
                   # the packet in quesion is lost?
                 else
                   e = @tx_pending_events.shift
-                  f |= e.opts[:keep_connection]
-                  if b = e.block
-                    EM.next_tick do
-                      b.call
-                    end
-                  end
+                  ok = [e]
                 end
               end
+              f = !ng.empty?
+              ng.each_next_tick {|e| e.sender.fire e.event, e.opts, e.retry + 1, &e.block }
+              ok.each_next_tick {|e| e.block.call if e.block }
+              ok.each do |e|
+                x = @@all_pending_events[e.event] - 1
+                if x <= 0
+                  @@all_pending_events.delete e.event
+                else
+                  @@all_pending_events[e.event] = x
+                end
+              end
+              f = ok.inject(f) {|r, e| r | e.opts[:keep_connection] }
               if f == false and @tx_pending_events.empty?
                 @connection.disconnect do
                   EM.stop
