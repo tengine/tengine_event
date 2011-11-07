@@ -375,4 +375,19 @@ describe "Tengine::Event" do
 
   end
 
+  describe "#transmitted?" do
+
+    subject { Tengine::Event.new }
+
+    it "returns false while not transmitted" do
+      Tengine::Mq::Suite.stub(:pending?).with(subject).and_return(true)
+      subject.transmitted?.should be_false
+    end
+
+    it "returns true once transmitted" do
+      Tengine::Mq::Suite.stub(:pending?).with(subject).and_return(false)
+      subject.transmitted?.should be_true
+    end
+  end
+
 end
