@@ -165,7 +165,6 @@ class Tengine::Mq::Suite
       exchange_type = c.delete(:type)
       exchange_name = c.delete(:name)
       @exchange = AMQP::Exchange.new(channel, exchange_type, exchange_name, c)
-      setup_confirmation
     end
     @exchange
   end
@@ -226,11 +225,15 @@ class Tengine::Mq::Suite
   end
 
   def wait_for_connection &block
-    defer = proc do
+    defer1 = proc do
 #       Tengine.logger.info "waiting for MQ to be set up..."
+      sleep 0.1 until connection.connected?
+    end
+    defer2 = proc do |a|
+      channel; setup_confirmation # initiate
       sleep 0.1 until instance_variable_get("@publisher_confirmation_initiated")
     end
-    EM.defer defer, block
+    EM.defer defer1, lambda {|a| EM.defer defer2, block }
   end
 
   private
