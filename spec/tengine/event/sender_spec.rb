@@ -68,21 +68,20 @@ describe "Tengine::Event::Sender" do
     context "正常系" do
       before do
         @sender = Tengine::Event::Sender.new(:exchange => {:name => "exchange1"})
+        @sender.mq_suite.stub(:ensure_publisher_confirmation).and_yield
       end
 
       it "JSON形式にserializeしてexchangeにpublishする" do
         occurred_at = Time.now
         expected_event = Tengine::Event.new(:event_type_name => :foo, :key => "uniq_key", :occurred_at => occurred_at)
         @mock_exchange.should_receive(:publish).with(expected_event.to_json, :persistent => true)
-        EM.stub(:add_timer).with(1)
-        @sender.fire(:foo, :key => "uniq_key", :occurred_at => occurred_at)
+        EM.run { @sender.fire(:foo, :key => "uniq_key", :occurred_at => occurred_at) }
       end
 
       it "Tengine::Eventオブジェクトを直接指定することも可能" do
         expected_event = Tengine::Event.new(:event_type_name => :foo, :key => "uniq_key")
         @mock_exchange.should_receive(:publish).with(expected_event.to_json, :persistent => true)
-        EM.stub(:add_timer).with(1)
-        @sender.fire(expected_event)
+        EM.run { @sender.fire(expected_event) }
       end
 
       context "publish後に特定の処理を行う" do
@@ -90,27 +89,28 @@ describe "Tengine::Event::Sender" do
           expected_event = Tengine::Event.new(:event_type_name => :foo, :key => "uniq_key")
           @mock_exchange.should_receive(:publish).with(expected_event.to_json, :persistent => true)
           @mock_connection.should_receive(:disconnect).and_yield
-          EM.stub(:add_timer).with(1)
-          EM.should_receive(:stop)
+          EM.should_receive(:stop).at_least(1).times
           EM.stub(:next_tick).and_yield
           block_called = false
           @sender.fire(expected_event){ block_called = true }
           block_called.should == true
+          @sender.mq_suite.connection.disconnect { EM.stop }
         end
 
         it "自動で切断せずに、接続を維持する" do
           expected_event = Tengine::Event.new(:event_type_name => :foo, :key => "uniq_key")
           @mock_exchange.should_receive(:publish).with(expected_event.to_json, :persistent => true)
-          @mock_connection.should_not_receive(:disconnect)
-          EM.stub(:add_timer).with(1)
-          EM.should_not_receive(:stop)
+          n = 0
+          EM.stub(:stop) { n += 1 }
           EM.stub(:next_tick).and_yield
           block_called = false
           @sender.default_keep_connection = true
           @sender.fire(expected_event){ block_called = true }
           block_called.should == true
+          EM.unstub(:stop)
+          n.should <= 0
+          EM.run { @sender.mq_suite.connection.disconnect { EM.stop }; EM.add_timer(1) { EM.stop } }
         end
-
       end
     end
 
