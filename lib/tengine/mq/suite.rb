@@ -188,28 +188,34 @@ class Tengine::Mq::Suite
   end
 
   def fire sender, event, opts, retryc, block # :nodoc:
-    exchange.publish event.to_json, @config[:exchange][:publish]
-  rescue => e
-    # exchange.publish はたとえば RuntimeError を raise したりするようだ
-    if retryc >= opts[:retry_count]
-      raise ::Tengine::Event::Sender::RetryError.new(event, retryc, e)
-    else
-      EM.add_timer opts[:retry_interval] do
-        fire sender, event, opts, retryc + 1, block
-      end
-    end
-  else
-    if @tx_pending_events
-      @tag += 1
-      e = @@tx_pending_event.new @tag, sender, event, opts, retryc, block
-      @tx_pending_events.push e
-      @@all_pending_events[event] += 1
-    else
-      EM.next_tick do
-        block.call if block
-        unless opts[:keep_connection]
-          connection.disconnect do
-            EM.stop
+    ensure_publisher_confirmation do
+      begin
+        exchange.publish event.to_json, @config[:exchange][:publish]
+      rescue => e
+        # exchange.publish はたとえば RuntimeError を raise したりするようだ
+        if retryc >= opts[:retry_count]
+          raise ::Tengine::Event::Sender::RetryError.new(event, retryc, e)
+        else
+          EM.add_timer opts[:retry_interval] do
+            fire sender, event, opts, retryc + 1, block
+          end
+        end
+      else
+        if @tx_pending_events
+          @tag += 1
+          e = @@tx_pending_event.new @tag, sender, event, opts, retryc, block
+          @tx_pending_events.push e
+          @@all_pending_events[event] += 1
+        else
+          EM.next_tick do
+            block.call if block
+            unless opts[:keep_connection]
+              EM.next_tick do
+                connection.disconnect do
+                  EM.stop
+                end
+              end
+            end
           end
         end
       end
@@ -237,6 +243,16 @@ class Tengine::Mq::Suite
   end
 
   private
+
+  def ensure_publisher_confirmation
+    if instance_variable_get("@publisher_confirmation_initiated")
+      yield
+    else
+      wait_for_connection do
+        yield
+      end
+    end
+  end
 
   @@tx_pending_event = Struct.new :tag, :sender, :event, :opts, :retry, :block
   @@all_pending_events = Hash.new do |h, k| h.store k, 0 end
