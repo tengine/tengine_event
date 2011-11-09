@@ -232,7 +232,7 @@ class Tengine::Mq::Suite
 
   def wait_for_connection &block
     defer1 = proc do
-#       Tengine.logger.info "waiting for MQ to be set up..."
+      Tengine::Core.stdout_logger.info "waiting for MQ to be set up..." if defined? Tengine::Core
       sleep 0.1 until connection.connected?
     end
     defer2 = proc do |a|
@@ -310,7 +310,7 @@ class Tengine::Mq::Suite
       @publisher_confirmation_initiated = true # initiated, but not available
       if !$__tengine_mq_suite_warning_shown__
         $__tengine_mq_suite_warning_shown__ = true
-        STDOUT <<<<-end.gsub(/^\t+/,'')
+        Tengine.logger.warn <<-end
 
 The  message  queue  broker   you  are  connecting   lacks  Publisher [BEWARE!]
 Confirmation capability,  so we cannot make  sure your events  are in [BEWARE!]
