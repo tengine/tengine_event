@@ -8,13 +8,12 @@ Gem::Specification.new do |s|
   s.version = "0.3.0"
 
   s.required_rubygems_version = Gem::Requirement.new(">= 0") if s.respond_to? :required_rubygems_version=
-  s.authors = ["akimatter"]
-  s.date = "2011-11-04"
+  s.authors = ["saishu", "w-irie", "taigou", "totty", "hiroshinakao", "g-morita", "guemon", "aoetk", "hattori-at-nt", "t-yamada", "y-karashima", "akm"]
+  s.date = "2011-11-14"
   s.description = "Tengine Event API to access the queue"
-  s.email = "akm2000@gmail.com"
+  s.email = "tengine@nautilus-technologies.com"
   s.executables = ["tengine_fire"]
   s.extra_rdoc_files = [
-    "LICENSE.txt",
     "README.rdoc"
   ]
   s.files = [
@@ -22,7 +21,6 @@ Gem::Specification.new do |s|
     ".rspec",
     "Gemfile",
     "Gemfile.lock",
-    "LICENSE.txt",
     "README.rdoc",
     "Rakefile",
     "VERSION",
@@ -32,6 +30,7 @@ Gem::Specification.new do |s|
     "lib/tengine/event/sender.rb",
     "lib/tengine/mq.rb",
     "lib/tengine/mq/suite.rb",
+    "lib/tengine/null_logger.rb",
     "lib/tengine_event.rb",
     "spec/.gitignore",
     "spec/mq_config.yml.example",
@@ -41,12 +40,14 @@ Gem::Specification.new do |s|
     "spec/tengine/event_spec.rb",
     "spec/tengine/mq/connect_actually_spec.rb",
     "spec/tengine/mq/suite_spec.rb",
+    "spec/tengine/null_logger_spec.rb",
+    "spec/tengine_spec.rb",
     "tengine_event.gemspec"
   ]
-  s.homepage = "http://github.com/akm/tengine_event"
-  s.licenses = ["MIT"]
+  s.homepage = "https://github.com/tengine/tengine_event"
+  s.licenses = ["MPL/LGPL"]
   s.require_paths = ["lib"]
-  s.rubygems_version = "1.8.10"
+  s.rubygems_version = "1.8.11"
   s.summary = "Tengine Event API to access the queue"
 
   if s.respond_to? :specification_version then
