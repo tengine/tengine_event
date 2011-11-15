@@ -78,6 +78,7 @@ class Tengine::Mq::Suite
     @mutex = Mutex.new
     @publisher_confirmation_status = :disconnected
     @tx_pending_events = Array.new
+    @retrying_events = Array.new
     # 一度も、AMQP.connectを実行する前に、connection に関する例外が発生すると、
     # 再接続などのハンドリングができないので、初期化時に connection への接続までを行います。
     connection
@@ -135,14 +136,20 @@ class Tengine::Mq::Suite
       @connection = AMQP.connect(config[:connection], &block)
       unless auto_reconnect_delay.nil?
         @connection.on_tcp_connection_loss do |conn, settings|
+          revoke_retry_timers
           conn.reconnect(false, auto_reconnect_delay.to_i)
         end
         @connection.after_recovery do |conn, settings|
-          reset_channel
+          @channel = nil
+          @exchange = nil
+          @queue = nil
         end
         @connection.on_closed do
+          revoke_retry_timers
           @connection = nil
-          reset_channel
+          @channel = nil
+          @exchange = nil
+          @queue = nil
         end
       end
     end
@@ -181,14 +188,6 @@ class Tengine::Mq::Suite
     @queue
   end
 
-  def reset_channel
-    @channel = nil
-    @exchange = nil
-    @queue = nil
-    @tx_pending_events = nil
-    @publisher_confirmation_initiated = false
-  end
-
   def fire sender, event, opts, retryc, block # :nodoc:
     defer_until_proper_handshake do
       begin
@@ -198,9 +197,9 @@ class Tengine::Mq::Suite
         if retryc >= opts[:retry_count]
           raise ::Tengine::Event::Sender::RetryError.new(event, retryc, e)
         else
-          EM.add_timer opts[:retry_interval] do
-            fire sender, event, opts, retryc + 1, block
-          end
+          e = @@pending_event.new @tag, sender, event, opts, retryc, block
+          idx = EM.add_timer opts[:retry_interval] do e.fire end
+          @retrying_events << [idx, Time.now, e]
         end
       else
         case @publisher_confirmation_status
@@ -217,7 +216,7 @@ class Tengine::Mq::Suite
           end
         when :established then
           @tag += 1
-          e = @@tx_pending_event.new @tag, sender, event, opts, retryc, block
+          e = @@pending_event.new @tag, sender, event, opts, retryc, block
           @tx_pending_events.push e
           @@all_pending_events[event] += 1
         else
@@ -237,8 +236,42 @@ class Tengine::Mq::Suite
 
   private
 
-  @@tx_pending_event = Struct.new :tag, :sender, :event, :opts, :retry, :block
   @@all_pending_events = Hash.new do |h, k| h.store k, 0 end
+  @@pending_event = Struct.new :tag, :sender, :event, :opts, :retry, :block
+  @@pending_event.class_eval do
+    def fire
+      sender.fire event, opts, self.retry + 1, &block # retry is a keyword
+    end
+  end
+
+  def revoke_retry_timers
+    @mutex.synchronize do
+      if @publisher_confirmation_initiated != :disconnected
+        @publisher_confirmation_initiated = :disconnected
+        @retrying_events.each do |(idx, *)|
+          EM.stop_timer idx if idx
+        end
+        # all pending events are hereby considered lost
+        @tx_pending_events.each do |e|
+          @retrying_events << [nil, 0, ev]
+        end
+      end
+    end
+  end
+
+  def reinvoke_retry_timers
+    @retrying_events.each_next_tick do |(i, j, k)|
+      u = Time.now - (k.opts[:retry_interval] || 0) - j
+      if u < 0
+        # retry interval passed, just send it again
+        k.fire
+      else
+        # need to re-add timer
+        EM.add_timer u do k.fire end
+      end
+    end
+    @retrying_events.clear
+  end
 
   def consume_publisher_confirmation ack
     f = !@tx_pending_events.empty?
@@ -276,7 +309,7 @@ class Tengine::Mq::Suite
 
   def setup_publisher_confirmation
     @mutex.synchronize do
-      revoke_retry_timers
+      reinvoke_retry_timers
       channel.on_ack do |ack| consume_publisher_confirmation ack end
       @tag = 1
       @publisher_confirmation_status = :established

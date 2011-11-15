@@ -118,15 +118,6 @@ describe "Tengine::Mq::Suite" do
       subject.connection(true)
     end
 
-    it "'s reset_channel call channel, exchange, queue with true to clear memoized objects" do
-      AMQP.should_receive(:connect).with({:user=>"guest", :pass=>"guest", :vhost=>"/",
-          :logging=>false, :insist=>false, :host=>"localhost", :port=>5672}).and_return(@mock_connection)
-      @mock_connection.should_receive(:on_tcp_connection_loss)
-      @mock_connection.should_receive(:after_recovery)
-      @mock_connection.should_receive(:on_closed)
-      subject.reset_channel
-    end
-
   end
 
 end
