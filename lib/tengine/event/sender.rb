@@ -79,9 +79,9 @@ class Tengine::Event::Sender
     @mq_suite.pending_events_for self
   end
 
+  # fireの中で勝手に待つようにしましたので、今後不要です。
+  # 使っている箇所はやがて消していきましょう。
   def wait_for_connection
-    mq_suite.wait_for_connection do
-      yield
-    end
+    yield
   end
 end

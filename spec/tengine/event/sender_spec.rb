@@ -88,28 +88,26 @@ describe "Tengine::Event::Sender" do
         it "カスタム処理" do
           expected_event = Tengine::Event.new(:event_type_name => :foo, :key => "uniq_key")
           @mock_exchange.should_receive(:publish).with(expected_event.to_json, :persistent => true)
-          @mock_connection.should_receive(:disconnect).and_yield
-          EM.should_receive(:stop).at_least(1).times
-          EM.stub(:next_tick).and_yield
           block_called = false
-          @sender.fire(expected_event){ block_called = true }
+          EM.run {
+            @sender.fire(expected_event){ block_called = true }
+          }
           block_called.should == true
-          @sender.mq_suite.connection.disconnect { EM.stop }
         end
 
         it "自動で切断せずに、接続を維持する" do
+          # mock connection ではテストが難しい
           expected_event = Tengine::Event.new(:event_type_name => :foo, :key => "uniq_key")
           @mock_exchange.should_receive(:publish).with(expected_event.to_json, :persistent => true)
-          n = 0
-          EM.stub(:stop) { n += 1 }
-          EM.stub(:next_tick).and_yield
           block_called = false
-          @sender.default_keep_connection = true
-          @sender.fire(expected_event){ block_called = true }
+          EM.run {
+            @sender.default_keep_connection = true
+            @sender.fire(expected_event){ block_called = true }
+            EM.add_timer(1) {
+              @sender.mq_suite.connection.disconnect { EM.stop }
+            }
+          }
           block_called.should == true
-          EM.unstub(:stop)
-          n.should <= 0
-          EM.run { @sender.mq_suite.connection.disconnect { EM.stop }; EM.add_timer(1) { EM.stop } }
         end
       end
     end

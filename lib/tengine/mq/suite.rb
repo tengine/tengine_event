@@ -75,10 +75,12 @@ class Tengine::Mq::Suite
       d
     end
     @auto_reconnect_delay = @config[:connection].delete(:auto_reconnect_delay)
+    @mutex = Mutex.new
+    @publisher_confirmation_status = :disconnected
+    @tx_pending_events = Array.new
     # 一度も、AMQP.connectを実行する前に、connection に関する例外が発生すると、
     # 再接続などのハンドリングができないので、初期化時に connection への接続までを行います。
     connection
-    @tx_pending_events = nil
   end
 
   DEFAULT_CONFIG= {
@@ -188,7 +190,7 @@ class Tengine::Mq::Suite
   end
 
   def fire sender, event, opts, retryc, block # :nodoc:
-    ensure_publisher_confirmation do
+    defer_until_proper_handshake do
       begin
         exchange.publish event.to_json, @config[:exchange][:publish]
       rescue => e
@@ -201,12 +203,8 @@ class Tengine::Mq::Suite
           end
         end
       else
-        if @tx_pending_events
-          @tag += 1
-          e = @@tx_pending_event.new @tag, sender, event, opts, retryc, block
-          @tx_pending_events.push e
-          @@all_pending_events[event] += 1
-        else
+        case @publisher_confirmation_status
+        when :unsupported then
           EM.next_tick do
             block.call if block
             unless opts[:keep_connection]
@@ -217,107 +215,129 @@ class Tengine::Mq::Suite
               end
             end
           end
+        when :established then
+          @tag += 1
+          e = @@tx_pending_event.new @tag, sender, event, opts, retryc, block
+          @tx_pending_events.push e
+          @@all_pending_events[event] += 1
+        else
+          raise "timing bug.  contact @shyoyuhei with this info: #{@publisher_confirmation_status}"
         end
       end
     end
   end
 
   def pending_events_for sender # :nodoc:
-    (@tx_pending_events||[]).select {|i| i.sender == sender }.map {|i| i.event }
+    @tx_pending_events.select {|i| i.sender == sender }.map {|i| i.event }
   end
 
   def self.pending? event # :nodoc:
     @@all_pending_events.has_key? event
   end
 
-  def wait_for_connection &block
-    defer1 = proc do
-      Tengine::Core.stdout_logger.info "waiting for MQ to be set up..." if defined? Tengine::Core
-      sleep 0.1 until connection.connected?
-    end
-    defer2 = proc do |a|
-      channel; setup_confirmation # initiate
-      sleep 0.1 until instance_variable_get("@publisher_confirmation_initiated")
-    end
-    EM.defer defer1, lambda {|a| EM.defer defer2, block }
-  end
-
   private
-
-  def ensure_publisher_confirmation
-    if instance_variable_get("@publisher_confirmation_initiated")
-      yield
-    else
-      wait_for_connection do
-        yield
-      end
-    end
-  end
 
   @@tx_pending_event = Struct.new :tag, :sender, :event, :opts, :retry, :block
   @@all_pending_events = Hash.new do |h, k| h.store k, 0 end
 
-  def setup_confirmation
-    return if @publisher_confirmation_initiated
-    raise "It seems the message queue is absent.  Consider using Suite#wait_for_connection" unless connection.connected?
+  def consume_publisher_confirmation ack
+    f = !@tx_pending_events.empty?
+    n = ack.delivery_tag
+    ok = []
+    ng = []
+    if ack.multiple
+      ok, @tx_pending_events = @tx_pending_events.partition {|i| i.tag <= n }
+    else
+      ng, @tx_pending_events = @tx_pending_events.partition {|i| i.tag < n }
+      if @tx_pending_events.empty?
+        # the packet in quesion is lost?
+      elsif e = @tx_pending_events.shift
+        ok = [e]
+      end
+    end
+    f ||= !ng.empty?
+    ng.each_next_tick {|e| e.sender.fire e.event, e.opts, e.retry + 1, &e.block }
+    ok.each_next_tick {|e| e.block.call if e.block }
+    ok.each do |e|
+      x = @@all_pending_events[e.event] - 1
+      if x <= 0
+        @@all_pending_events.delete e.event
+      else
+        @@all_pending_events[e.event] = x
+      end
+    end
+    f = ok.inject(f) {|r, e| r | e.opts[:keep_connection] }
+    if f == false and @tx_pending_events.empty?
+      @connection.disconnect do
+        EM.stop
+      end
+    end
+  end
 
-    cap = connection.server_capabilities
-    if cap and cap["publisher_confirms"] then
-      unless channel.uses_publisher_confirmations?
-        channel.confirm_select do
-          @tx_pending_events = Array.new
-          @tag = 1
-          @publisher_confirmation_initiated = true
-          channel.on_ack do |ack|
-            unless @tx_pending_events.empty?
-              f = false
-              n = ack.delivery_tag
-              ok = []
-              ng = []
-              if ack.multiple
-                ok, @tx_pending_events = @tx_pending_events.partition {|i| i.tag <= n }
-              else
-                ng, @tx_pending_events = @tx_pending_events.partition {|i| i.tag < n }
-                if @tx_pending_events.empty?
-                  # the packet in quesion is lost?
-                else
-                  e = @tx_pending_events.shift
-                  ok = [e]
-                end
-              end
-              f = !ng.empty?
-              ng.each_next_tick {|e| e.sender.fire e.event, e.opts, e.retry + 1, &e.block }
-              ok.each_next_tick {|e| e.block.call if e.block }
-              ok.each do |e|
-                x = @@all_pending_events[e.event] - 1
-                if x <= 0
-                  @@all_pending_events.delete e.event
-                else
-                  @@all_pending_events[e.event] = x
-                end
-              end
-              f = ok.inject(f) {|r, e| r | e.opts[:keep_connection] }
-              if f == false and @tx_pending_events.empty?
-                @connection.disconnect do
-                  EM.stop
-                end
-              end
+  def setup_publisher_confirmation
+    @mutex.synchronize do
+      revoke_retry_timers
+      channel.on_ack do |ack| consume_publisher_confirmation ack end
+      @tag = 1
+      @publisher_confirmation_status = :established
+    end
+  end
+
+  def initiate_publisher_confirmation
+    @mutex.synchronize do
+      case @publisher_confirmation_status
+      when :estabished, :unsupported
+        return true
+      when :handshaking
+        # in progress
+        return false
+      else
+        cap = connection.server_capabilities
+        if cap and cap["publisher_confirms"] then
+          if channel.uses_publisher_confirmations?
+            # already
+          else
+            @publisher_confirmation_status = :handshaking
+            channel.confirm_select do
+              setup_publisher_confirmation
             end
           end
-        end
-      end
-    else
-      @publisher_confirmation_initiated = true # initiated, but not available
-      if !$__tengine_mq_suite_warning_shown__
-        $__tengine_mq_suite_warning_shown__ = true
-        Tengine.logger.warn <<-end
+          return false
+        else
+          @publisher_confirmation_status = :unsupported # initiated, but not available
+          if !$__tengine_mq_suite_warning_shown__
+            $__tengine_mq_suite_warning_shown__ = true
+            Tengine.logger.warn <<-end
 
 The  message  queue  broker   you  are  connecting   lacks  Publisher [BEWARE!]
 Confirmation capability,  so we cannot make  sure your events  are in [BEWARE!]
 fact reaching  to one  of the Tengine  cores.  We strongly  recommend [BEWARE!]
 you to use a relatively recent version of RabbitMQ.                   [BEWARE!]
 
+            end
+          end
+          return true
         end
+      end
+    end
+  end
+
+  def defer_until_proper_handshake
+    @mutex.synchronize do
+      case @publisher_confirmation_status when :established, :unsupported
+        EM.next_tick do yield end
+      else
+        raise ArgumentError, "no block given" unless block_given?
+        Tengine::Core.stdout_logger.info "waiting for MQ to be set up..." if defined? Tengine::Core
+
+        #              vvv -- note this lane
+        d4 = lambda do |a| yield                                           end
+        d3 = lambda do     sleep 0.1 until initiate_publisher_confirmation end
+        d2 = lambda do |a| EM.defer d3, d4                                 end
+        d1 = lambda do     sleep 0.1 until connection.connected?           end
+        d0 = lambda do     EM.defer d1, d2                                 end
+
+        d0.call
       end
     end
   end
