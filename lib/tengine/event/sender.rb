@@ -1,6 +1,8 @@
 # -*- coding: utf-8 -*-
 require 'tengine/event'
 
+require 'active_support/core_ext/array/extract_options'
+
 class Tengine::Event::Sender
 
   class RetryError < StandardError
@@ -20,18 +22,22 @@ class Tengine::Event::Sender
   end
 
   attr_reader :mq_suite
+  attr_reader :logger
   attr_accessor :default_keep_connection
   attr_accessor :stop_after_transmission
 
-  def initialize(config_or_mq_suite = nil)
+  def initialize(*args)
+    options = args.extract_options!
+    config_or_mq_suite = args.first
     case config_or_mq_suite
     when Tengine::Mq::Suite then
       @mq_suite = config_or_mq_suite
-    when nil, Hash then
-      @mq_suite = Tengine::Mq::Suite.new(config_or_mq_suite)
+    when nil then
+      @mq_suite = Tengine::Mq::Suite.new(options)
     end
     @default_keep_connection = (@mq_suite.config[:sender] || {})[:keep_connection]
     @stop_after_transmission = !@default_keep_connection
+    @logger = options[:logger] || Tengine::NullLogger.new
   end
 
   # publish an event message to AMQP exchange
@@ -49,6 +55,7 @@ class Tengine::Event::Sender
   # @option options [Hash] :retry_count
   # @return [Tengine::Event]
   def fire(event_or_event_type_name, options = {}, retry_count = 0, &block)
+    @logger.info("fire(#{event_or_event_type_name.inspect}, #{options}, #{retry_count}) called")
     opts ||= (options || {}).dup
     keep_connection ||= (opts.delete(:keep_connection) || default_keep_connection)
     sender_retry_interval ||= (opts.delete(:retry_interval) || mq_suite.config[:sender][:retry_interval]).to_i
@@ -62,6 +69,10 @@ class Tengine::Event::Sender
       end
     @mq_suite.fire self, event, { :keep_connection => keep_connection, :retry_interval => sender_retry_interval, :retry_count => sender_retry_count }, retry_count, block
     event
+    @logger.info("fire(#{event_or_event_type_name.inspect}, #{options}) complete")
+  rescue Exception => e
+    @logger.warn("fire(#{event_or_event_type_name.inspect}, #{options}) raised [#{e.class.name}] #{e.message}")
+    raise e
   end
 
   def pending_events

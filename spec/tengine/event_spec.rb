@@ -12,6 +12,15 @@ describe "Tengine::Event" do
     Process.stub!(:pid).and_return(12345)
   end
 
+  # hack!
+  after :each do
+    EM.instance_eval do
+      @next_tick_mutex.synchronize do
+        @next_tick_queue = nil
+      end
+    end
+  end
+
   describe :new_object do
     context "without config" do
       before do
