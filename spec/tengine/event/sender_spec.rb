@@ -123,8 +123,7 @@ describe "Tengine::Event::Sender" do
         block_called = false
         EM.run {
           @sender.fire(expected_event){ block_called = true }
-          EM.defer(lambda { sleep 0.1 until @sender.pending_events.empty? },
-                   lambda {|a| @sender.mq_suite.connection.disconnect { EM.stop } })
+          @sender.stop
         }
         block_called.should == false
       end
@@ -135,8 +134,7 @@ describe "Tengine::Event::Sender" do
           # 正規のfireとリトライのfireなので、リトライ回数+1
           @mock_exchange.should_receive(:publish).with(expected_event.to_json, {:persistent=>true}).exactly(31).times.and_raise('error')
           @sender.fire(expected_event)
-          EM.defer(lambda { sleep 0.1 until @sender.pending_events.empty? }, 
-                   lambda {|a| @sender.mq_suite.connection.disconnect { EM.stop } })
+          @sender.stop
         }
       end
 
@@ -146,8 +144,7 @@ describe "Tengine::Event::Sender" do
           # 正規のfireとリトライのfireなので、リトライ回数+1
           @mock_exchange.should_receive(:publish).with(expected_event.to_json, {:persistent=>true}).exactly(2).times.and_raise('error')
           @sender.fire(expected_event, :retry_count => 1)
-          EM.defer(lambda { sleep 0.1 until @sender.pending_events.empty? },
-                   lambda {|a| @sender.mq_suite.connection.disconnect { EM.stop } })
+          @sender.stop
         }
       end
 
@@ -157,8 +154,7 @@ describe "Tengine::Event::Sender" do
           # 正規のfireとリトライのfireなので、リトライ回数+1
           @mock_exchange.should_receive(:publish).with(expected_event.to_json, {:persistent=>true}).exactly(4).times.and_raise('error')
           @sender.fire(expected_event, :retry_count => 3, :retry_interval => 0)
-          EM.defer(lambda { sleep 0.1 until @sender.pending_events.empty? },
-                   lambda {|a| @sender.mq_suite.connection.disconnect { EM.stop } })
+          @sender.stop
         }
       end
 
@@ -175,8 +171,7 @@ describe "Tengine::Event::Sender" do
         block_called = false
         EM.run {
           @sender.fire(expected_event, :retry_count => 1) { block_called = true }
-          EM.defer(lambda { sleep 0.1 until @sender.pending_events.empty? },
-                   lambda {|a| @sender.mq_suite.connection.disconnect { EM.stop } })
+          @sender.stop
         }
         block_called.should be_true
       end
@@ -200,8 +195,7 @@ describe "Tengine::Event::Sender" do
         EM.run do
           subject.fire(ev1, :keep_connection => true)
           subject.fire(ev2, :keep_connection => true)
-          EM.defer(lambda { sleep 0.1 unless subject.pending_events.empty? },
-                   lambda {|a| subject.mq_suite.connection.disconnect { EM.stop } })
+          subject.stop
         end
         if n1 == 31
           n2.should <= 31
@@ -225,8 +219,7 @@ describe "Tengine::Event::Sender" do
             end
           end
           EM.next_tick do
-            EM.defer(lambda { sleep 0.1 until subject.pending_events.empty? },
-                     lambda {|a| subject.mq_suite.connection.disconnect { EM.stop } })
+            subject.stop
           end
         end
         GC.start

@@ -27,6 +27,10 @@ class Tengine::Event::Sender
     @logger = options[:logger] || Tengine::NullLogger.new
   end
 
+  def stop(&block)
+    @mq_suite.stop(&block)
+  end
+
   # publish an event message to AMQP exchange
   # @param [String/Tengine::Event] event_or_event_type_name
   # @param [Hash] options the options for attributes
