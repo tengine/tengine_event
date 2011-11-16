@@ -8,7 +8,7 @@ require 'amqp/extensions/rabbitmq'
 module Enumerable
   def each_next_tick
     raise ArgumentError, "no block given" unless block_given?
-    self.reverse.inject(->{}) do |block, obj|
+    self.reverse_each.inject(lambda{}) do |block, obj|
       lambda do
         EM.next_tick do
           yield obj
