@@ -213,9 +213,8 @@ class Tengine::Mq::Suite
 
     callbacks = mids.inject({}) {|r, mid|
       r.update mid => lambda {|*argv|
-        @hooks[:"connection.#{mid}"].each {|proc|
-          proc.call(*argv)
-        }
+        @hooks[:"everything"].each {|proc| proc.call(mid, argv) }
+        @hooks[:"connection.#{mid}"].each {|proc| proc.call(*argv) }
       }
     }
 
