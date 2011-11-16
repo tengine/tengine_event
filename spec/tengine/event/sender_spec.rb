@@ -7,8 +7,7 @@ describe "Tengine::Event::Sender" do
     before do
       # connection
       @mock_connection = mock(:connection)
-      AMQP.should_receive(:connect).with({:user=>"guest", :pass=>"guest", :vhost=>"/",
-          :logging=>false, :insist=>false, :host=>"localhost", :port=>5672}).and_return(@mock_connection)
+      AMQP.should_receive(:connect).with(an_instance_of(Hash)).and_return(@mock_connection)
       @mock_connection.should_receive(:on_tcp_connection_loss)
       @mock_connection.should_receive(:after_recovery)
       @mock_connection.should_receive(:on_closed)
@@ -49,8 +48,7 @@ describe "Tengine::Event::Sender" do
       @mock_exchange = mock(:exchange)
 
       # connection
-      AMQP.should_receive(:connect).with({:user=>"guest", :pass=>"guest", :vhost=>"/",
-          :logging=>false, :insist=>false, :host=>"localhost", :port=>5672}).and_return(@mock_connection)
+      AMQP.should_receive(:connect).with(an_instance_of(Hash)).and_return(@mock_connection)
       @mock_connection.should_receive(:on_tcp_connection_loss)
       @mock_connection.should_receive(:after_recovery)
       @mock_connection.should_receive(:on_closed)
