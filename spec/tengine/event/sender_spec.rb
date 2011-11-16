@@ -7,8 +7,7 @@ describe "Tengine::Event::Sender" do
     before do
       # connection
       @mock_connection = mock(:connection)
-      AMQP.should_receive(:connect).with({:user=>"guest", :pass=>"guest", :vhost=>"/",
-          :logging=>false, :insist=>false, :host=>"localhost", :port=>5672}).and_return(@mock_connection)
+      AMQP.should_receive(:connect).with(an_instance_of(Hash)).and_return(@mock_connection)
       @mock_connection.should_receive(:on_tcp_connection_loss)
       @mock_connection.should_receive(:after_recovery)
       @mock_connection.should_receive(:on_closed)
@@ -49,8 +48,7 @@ describe "Tengine::Event::Sender" do
       @mock_exchange = mock(:exchange)
 
       # connection
-      AMQP.should_receive(:connect).with({:user=>"guest", :pass=>"guest", :vhost=>"/",
-          :logging=>false, :insist=>false, :host=>"localhost", :port=>5672}).and_return(@mock_connection)
+      AMQP.should_receive(:connect).with(an_instance_of(Hash)).and_return(@mock_connection)
       @mock_connection.should_receive(:on_tcp_connection_loss)
       @mock_connection.should_receive(:after_recovery)
       @mock_connection.should_receive(:on_closed)
@@ -88,28 +86,26 @@ describe "Tengine::Event::Sender" do
         it "カスタム処理" do
           expected_event = Tengine::Event.new(:event_type_name => :foo, :key => "uniq_key")
           @mock_exchange.should_receive(:publish).with(expected_event.to_json, :persistent => true)
-          @mock_connection.should_receive(:disconnect).and_yield
-          EM.should_receive(:stop).at_least(1).times
-          EM.stub(:next_tick).and_yield
           block_called = false
-          @sender.fire(expected_event){ block_called = true }
+          EM.run {
+            @sender.fire(expected_event){ block_called = true }
+          }
           block_called.should == true
-          @sender.mq_suite.connection.disconnect { EM.stop }
         end
 
         it "自動で切断せずに、接続を維持する" do
+          # mock connection ではテストが難しい
           expected_event = Tengine::Event.new(:event_type_name => :foo, :key => "uniq_key")
           @mock_exchange.should_receive(:publish).with(expected_event.to_json, :persistent => true)
-          n = 0
-          EM.stub(:stop) { n += 1 }
-          EM.stub(:next_tick).and_yield
           block_called = false
-          @sender.default_keep_connection = true
-          @sender.fire(expected_event){ block_called = true }
+          EM.run {
+            @sender.default_keep_connection = true
+            @sender.fire(expected_event){ block_called = true }
+            EM.add_timer(1) {
+              @sender.mq_suite.connection.disconnect { EM.stop }
+            }
+          }
           block_called.should == true
-          EM.unstub(:stop)
-          n.should <= 0
-          EM.run { @sender.mq_suite.connection.disconnect { EM.stop }; EM.add_timer(1) { EM.stop } }
         end
       end
     end
@@ -125,68 +121,64 @@ describe "Tengine::Event::Sender" do
         EM.stub(:add_timer).with(0).exactly(31).times.and_yield
         EM.stub(:add_timer).with(0, an_instance_of(Proc)) {|k, v| v.call }
         block_called = false
-        expect{
-          EM.run {
-            @sender.fire(expected_event){ block_called = true }
-          }
-        }.to raise_error(Tengine::Event::Sender::RetryError)
+        EM.run {
+          @sender.fire(expected_event){ block_called = true }
+          EM.defer(lambda { sleep 0.1 until @sender.pending_events.empty? },
+                   lambda {|a| @sender.mq_suite.connection.disconnect { EM.stop } })
+        }
         block_called.should == false
       end
 
       it "エラーが発生しても設定のリトライが行われる" do
         expected_event = Tengine::Event.new(:event_type_name => :foo, :key => "uniq_key")
-        lambda {
-          begin
-            EM.run {
-              # 正規のfireとリトライのfireなので、リトライ回数+1
-              @mock_exchange.should_receive(:publish).with(expected_event.to_json, {:persistent=>true}).exactly(31).times.and_raise('error')
-              @sender.fire(expected_event)
-            }
-          rescue Tengine::Event::Sender::RetryError => e
-            e.message.should =~ /^failed 30 time\(s\) to send event #<Tengine::Event:[^\]]+>.  The last source exception was #<RuntimeError: error>$/
-            e.to_s.should == e.message
-            raise e
-          end
-        }.should raise_error(Tengine::Event::Sender::RetryError)
+        EM.run {
+          # 正規のfireとリトライのfireなので、リトライ回数+1
+          @mock_exchange.should_receive(:publish).with(expected_event.to_json, {:persistent=>true}).exactly(31).times.and_raise('error')
+          @sender.fire(expected_event)
+          EM.defer(lambda { sleep 0.1 until @sender.pending_events.empty? }, 
+                   lambda {|a| @sender.mq_suite.connection.disconnect { EM.stop } })
+        }
       end
 
       it "エラーが発生してもオプションで指定したリトライ回数分のリトライが行われる" do
         expected_event = Tengine::Event.new(:event_type_name => :foo, :key => "uniq_key")
-        lambda {
-          EM.run {
-            # 正規のfireとリトライのfireなので、リトライ回数+1
-            @mock_exchange.should_receive(:publish).with(expected_event.to_json, {:persistent=>true}).exactly(2).times.and_raise('error')
-            @sender.fire(expected_event, :retry_count => 1)
-          }
-        }.should raise_error(Tengine::Event::Sender::RetryError)
+        EM.run {
+          # 正規のfireとリトライのfireなので、リトライ回数+1
+          @mock_exchange.should_receive(:publish).with(expected_event.to_json, {:persistent=>true}).exactly(2).times.and_raise('error')
+          @sender.fire(expected_event, :retry_count => 1)
+          EM.defer(lambda { sleep 0.1 until @sender.pending_events.empty? },
+                   lambda {|a| @sender.mq_suite.connection.disconnect { EM.stop } })
+        }
       end
 
       it "エラーが発生してもオプションで指定したリトライ間隔でリトライが行われる" do
         expected_event = Tengine::Event.new(:event_type_name => :foo, :key => "uniq_key")
-        lambda {
-          EM.run {
-            # 正規のfireとリトライのfireなので、リトライ回数+1
-            @mock_exchange.should_receive(:publish).with(expected_event.to_json, {:persistent=>true}).exactly(4).times.and_raise('error')
-            @sender.fire(expected_event, :retry_count => 3, :retry_interval => 0)
-          }
-        }.should raise_error(Tengine::Event::Sender::RetryError)
+        EM.run {
+          # 正規のfireとリトライのfireなので、リトライ回数+1
+          @mock_exchange.should_receive(:publish).with(expected_event.to_json, {:persistent=>true}).exactly(4).times.and_raise('error')
+          @sender.fire(expected_event, :retry_count => 3, :retry_interval => 0)
+          EM.defer(lambda { sleep 0.1 until @sender.pending_events.empty? },
+                   lambda {|a| @sender.mq_suite.connection.disconnect { EM.stop } })
+        }
       end
 
       it "ちょうどretry_count回めのリトライして成功の場合は例外にならない" do
-        expected_event = mock(Tengine::Event.new(:event_type_name => :foo, :key => "uniq_key"))
-        lambda {
-          x = false
-          expected_event.stub(:to_json) do
-            if (x = !x)
-              raise "foo"
-            else
-              next "foo"
-            end
+        expected_event = Tengine::Event.new(:event_type_name => :foo, :key => "uniq_key")
+        x = false
+        @mock_exchange.stub(:publish).with(expected_event.to_json, {:persistent=>true}) do
+          if x = !x
+            raise "foo"
+          else
+            next "foo"
           end
-          EM.run {
-            @sender.fire(expected_event, :retry_count => 1)
-          }
-        }.should_not raise_error(Tengine::Event::Sender::RetryError)
+        end
+        block_called = false
+        EM.run {
+          @sender.fire(expected_event, :retry_count => 1) { block_called = true }
+          EM.defer(lambda { sleep 0.1 until @sender.pending_events.empty? },
+                   lambda {|a| @sender.mq_suite.connection.disconnect { EM.stop } })
+        }
+        block_called.should be_true
       end
     end
 
@@ -195,48 +187,50 @@ describe "Tengine::Event::Sender" do
       it "https://www.pivotaltracker.com/story/show/20236589" do
         n1 = 0
         n2 = 0
-        ev1 = mock(Tengine::Event.new(:event_type_name => :foo, :key => "uniq_key"))
-        ev2 = mock(Tengine::Event.new(:event_type_name => :foo, :key => "another_uniq_key"))
-        ev1.stub(:to_json) { n1 += 1; n1.to_s }
-        ev2.stub(:to_json) { n2 += 1; n2.to_s }
-        @mock_exchange.stub(:publish).with(an_instance_of(String), {:persistent=>true}).and_raise('error')
-        begin
-          EM.run do
-            EM.next_tick do
-              subject.fire(ev1, :keep_connection => true)
-              subject.fire(ev2, :keep_connection => true)
-            end
-          end
-        rescue Tengine::Event::Sender::RetryError => e
-          case e.event
-          when ev1
-            n1.should == 30
-            n2.should <= 29
-            n2.should >= 2
-          when ev2
-            n2.should == 30
-            n1.should <= 29
-            n1.should >= 2
-          end
+        ev1 = Tengine::Event.new(:event_type_name => :foo, :key => "uniq_key")
+        ev2 = Tengine::Event.new(:event_type_name => :foo, :key => "another_uniq_key")
+        @mock_exchange.stub(:publish).with(ev1.to_json, {:persistent=>true}) do
+          n1 += 1
+          raise "ev1"
+        end
+        @mock_exchange.stub(:publish).with(ev2.to_json, {:persistent=>true}) do
+          n2 += 1
+          raise "ev2"
+        end
+        EM.run do
+          subject.fire(ev1, :keep_connection => true)
+          subject.fire(ev2, :keep_connection => true)
+          EM.defer(lambda { sleep 0.1 unless subject.pending_events.empty? },
+                   lambda {|a| subject.mq_suite.connection.disconnect { EM.stop } })
+        end
+        if n1 == 31
+          n2.should <= 31
+          n2.should >= 2
+        elsif n2 == 31
+          n1.should <= 31
+          n1.should >= 2
+        else
+          raise "neither n1(#{n1}) nor n2(#{n2})"
         end
       end
 
       it "無限にメモリを消費しない" do
         n = 256 # 1024 # 4096
         @mock_exchange.stub(:publish).with(an_instance_of(String), {:persistent=>true}).and_raise('error')
-        begin
-          EM.run do
-            n.times do
-              EM.next_tick do
-                ev = Tengine::Event.new(:event_type_name => :foo, :key => "uniq_key")
-                subject.fire(ev, :keep_connection => true, :retry_cont => 3)
-              end
+        EM.run do
+          n.times do
+            EM.next_tick do
+              ev = Tengine::Event.new(:event_type_name => :foo, :key => "uniq_key")
+              subject.fire(ev, :keep_connection => true, :retry_cont => 3)
             end
           end
-        rescue Tengine::Event::Sender::RetryError => e
-          GC.start
-          subject.pending_events.size.should < n
+          EM.next_tick do
+            EM.defer(lambda { sleep 0.1 until subject.pending_events.empty? },
+                     lambda {|a| subject.mq_suite.connection.disconnect { EM.stop } })
+          end
         end
+        GC.start
+        subject.pending_events.size.should < n
       end
     end
   end
