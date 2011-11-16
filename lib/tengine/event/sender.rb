@@ -34,6 +34,10 @@ class Tengine::Event::Sender
     @stop_after_transmission = !@default_keep_connection
   end
 
+  def stop(&block)
+    @mq_suite.stop(&block)
+  end
+
   # publish an event message to AMQP exchange
   # @param [String/Tengine::Event] event_or_event_type_name
   # @param [Hash] options the options for attributes

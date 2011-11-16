@@ -242,6 +242,11 @@ class Tengine::Mq::Suite
     EM.defer defer1, lambda {|a| EM.defer defer2, block }
   end
 
+  def stop
+    EM.defer(lambda{ sleep 0.1 until @@all_pending_events.empty? },
+             lambda{|a| connection.disconnect { if block_given? then yield else EM.stop end }})
+  end
+
   private
 
   def ensure_publisher_confirmation
