@@ -12,6 +12,15 @@ describe "Tengine::Event" do
     Process.stub!(:pid).and_return(12345)
   end
 
+  # hack!
+  after :each do
+    EM.instance_eval do
+      @next_tick_mutex.synchronize do
+        @next_tick_queue = nil
+      end
+    end
+  end
+
   describe :new_object do
     context "without config" do
       before do
@@ -264,8 +273,7 @@ describe "Tengine::Event" do
       @mock_connection = mock(:connection)
       @mock_channel = mock(:channel)
       @mock_exchange = mock(:exchange)
-      AMQP.should_receive(:connect).with({:user=>"guest", :pass=>"guest", :vhost=>"/",
-          :logging=>false, :insist=>false, :host=>"localhost", :port=>5672, :foo => "aaa"}).and_return(@mock_connection)
+      AMQP.should_receive(:connect).with(an_instance_of(Hash)).and_return(@mock_connection)
       @mock_connection.should_receive(:on_tcp_connection_loss)
       @mock_connection.should_receive(:after_recovery)
       @mock_connection.should_receive(:on_closed)

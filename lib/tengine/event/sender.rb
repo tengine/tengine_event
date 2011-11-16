@@ -1,37 +1,30 @@
 # -*- coding: utf-8 -*-
 require 'tengine/event'
 
+require 'active_support/core_ext/array/extract_options'
+
 class Tengine::Event::Sender
 
-  class RetryError < StandardError
-    attr_reader :event, :retry_count, :source
-    def initialize(event, retry_count, source = nil)
-      @event, @retry_count = event, retry_count
-      @source = source.is_a?(RetryError) ? source.source : source
-    end
-    def message
-      result = "failed %d time(s) to send event %s." % [retry_count, event]
-      if @source
-        result << "  The last source exception was #{@source.inspect}"
-      end
-      result
-    end
-    alias_method :to_s, :message
-  end
+  # 現在不使用。やがて消します。
+  RetryError = Class.new StandardError
 
   attr_reader :mq_suite
+  attr_reader :logger
   attr_accessor :default_keep_connection
   attr_accessor :stop_after_transmission
 
-  def initialize(config_or_mq_suite = nil)
+  def initialize(*args)
+    options = args.extract_options!
+    config_or_mq_suite = args.first
     case config_or_mq_suite
     when Tengine::Mq::Suite then
       @mq_suite = config_or_mq_suite
-    when nil, Hash then
-      @mq_suite = Tengine::Mq::Suite.new(config_or_mq_suite)
+    when nil then
+      @mq_suite = Tengine::Mq::Suite.new(options)
     end
     @default_keep_connection = (@mq_suite.config[:sender] || {})[:keep_connection]
     @stop_after_transmission = !@default_keep_connection
+    @logger = options[:logger] || Tengine::NullLogger.new
   end
 
   def stop(&block)
@@ -53,6 +46,7 @@ class Tengine::Event::Sender
   # @option options [Hash] :retry_count
   # @return [Tengine::Event]
   def fire(event_or_event_type_name, options = {}, retry_count = 0, &block)
+    @logger.info("fire(#{event_or_event_type_name.inspect}, #{options}, #{retry_count}) called")
     opts ||= (options || {}).dup
     keep_connection ||= (opts.delete(:keep_connection) || default_keep_connection)
     sender_retry_interval ||= (opts.delete(:retry_interval) || mq_suite.config[:sender][:retry_interval]).to_i
@@ -66,15 +60,19 @@ class Tengine::Event::Sender
       end
     @mq_suite.fire self, event, { :keep_connection => keep_connection, :retry_interval => sender_retry_interval, :retry_count => sender_retry_count }, retry_count, block
     event
+    @logger.info("fire(#{event_or_event_type_name.inspect}, #{options}) complete")
+  rescue Exception => e
+    @logger.warn("fire(#{event_or_event_type_name.inspect}, #{options}) raised [#{e.class.name}] #{e.message}")
+    raise e
   end
 
   def pending_events
     @mq_suite.pending_events_for self
   end
 
+  # fireの中で勝手に待つようにしましたので、今後不要です。
+  # 使っている箇所はやがて消していきましょう。
   def wait_for_connection
-    mq_suite.wait_for_connection do
-      yield
-    end
+    yield
   end
 end

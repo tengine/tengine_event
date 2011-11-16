@@ -1,8 +1,35 @@
 # -*- coding: utf-8 -*-
-p# -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*-
 require File.expand_path(File.dirname(__FILE__) + '/../../spec_helper')
 
+require_relative '../../../lib/tengine/mq/suite'
 require 'amqp'
+
+describe Enumerable do
+  describe "#each_next_tick" do
+    it "eachと同じ順にiterateする" do
+      str = ""
+      EM.run do
+        [1, 2, 3, 4].each_next_tick do |i|
+          str << i.to_s
+        end
+        EM.add_timer 0.1 do EM.stop end
+      end
+      str.should == "1234"
+    end
+
+    it "next_tickでやる" do
+      str = ""
+      EM.run do
+        [1, 2, 3, 4].each_next_tick do |i|
+          str << i.to_s
+        end
+        str.should == ""
+        EM.add_timer 0.1 do EM.stop end
+      end
+    end
+  end
+end
 
 describe "Tengine::Mq::Suite" do
 
@@ -23,8 +50,7 @@ describe "Tengine::Mq::Suite" do
 
     it "'s exchange must be AMQP::Exchange" do
       # connection
-      AMQP.should_receive(:connect).with({:user=>"guest", :pass=>"guest", :vhost=>"/",
-          :logging=>false, :insist=>false, :host=>"localhost", :port=>5672}).and_return(@mock_connection)
+      AMQP.should_receive(:connect).with(an_instance_of(Hash)).and_return(@mock_connection)
       @mock_connection.should_receive(:on_tcp_connection_loss)
       @mock_connection.should_receive(:after_recovery)
       @mock_connection.should_receive(:on_closed)
@@ -40,8 +66,7 @@ describe "Tengine::Mq::Suite" do
 
     it "'s queue must be AMQP::Queue" do
       # connection
-      AMQP.should_receive(:connect).with({:user=>"guest", :pass=>"guest", :vhost=>"/",
-          :logging=>false, :insist=>false, :host=>"localhost", :port=>5672}).and_return(@mock_connection)
+      AMQP.should_receive(:connect).with(an_instance_of(Hash)).and_return(@mock_connection)
       @mock_connection.should_receive(:on_tcp_connection_loss)
       @mock_connection.should_receive(:after_recovery)
       @mock_connection.should_receive(:on_closed)
@@ -66,8 +91,7 @@ describe "Tengine::Mq::Suite" do
         :timeout => nil, :logging => false, :ssl => false, :broker => nil, :frame_max => 131072, :insist => false
       }
       # connection
-      AMQP.should_receive(:connect).with({:user=>"guest", :pass=>"guest", :vhost=>"/",
-          :logging=>false, :insist=>false, :host=>"localhost", :port=>5672}).and_return(@mock_connection)
+      AMQP.should_receive(:connect).with(an_instance_of(Hash)).and_return(@mock_connection)
       @mock_connection.should_receive(:on_tcp_connection_loss).and_yield(@mock_connection, settings)
       @mock_connection.should_receive(:reconnect).with(false, 3)
       @mock_connection.should_receive(:after_recovery)
@@ -81,23 +105,13 @@ describe "Tengine::Mq::Suite" do
         :timeout => nil, :logging => false, :ssl => false, :broker => nil, :frame_max => 131072, :insist => false
       }
       # connection
-      AMQP.should_receive(:connect).with({:user=>"guest", :pass=>"guest", :vhost=>"/",
-          :logging=>false, :insist=>false, :host=>"localhost", :port=>5672}).twice.and_return(@mock_connection)
+      AMQP.should_receive(:connect).with(an_instance_of(Hash)).twice.and_return(@mock_connection)
       @mock_connection.should_receive(:on_tcp_connection_loss).twice.and_yield(@mock_connection, settings)
       @mock_connection.should_receive(:reconnect).twice.with(false, 3)
       @mock_connection.should_receive(:on_closed).twice
       @mock_connection.should_receive(:after_recovery).twice # .and_yield(@mock_connection, settings)
       # subject.should_receive(:reset_channel) # stack level too deep になってしまうので、コメントアウトしてます
-      subject.connection(true)
-    end
-
-    it "'s reset_channel call channel, exchange, queue with true to clear memoized objects" do
-      AMQP.should_receive(:connect).with({:user=>"guest", :pass=>"guest", :vhost=>"/",
-          :logging=>false, :insist=>false, :host=>"localhost", :port=>5672}).and_return(@mock_connection)
-      @mock_connection.should_receive(:on_tcp_connection_loss)
-      @mock_connection.should_receive(:after_recovery)
-      @mock_connection.should_receive(:on_closed)
-      subject.reset_channel
+      subject.connection(:force)
     end
 
   end
