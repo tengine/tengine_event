@@ -301,19 +301,18 @@ class Tengine::Mq::Suite
   end
 
   def reinvoke_retry_timers
-    @mutex.synchronize do
-      @retrying_events.each_pair.each_next_tick do |i, (j, k)|
-        u = Time.now - (k.opts[:retry_interval] || 0) - j
-        if u < 0
-          # retry interval passed, just send it again
-          k.fire
-        else
-          # need to re-add timer
-          EM.add_timer u do k.fire end
-        end
+    #inside mutex lock
+    @retrying_events.each_pair.to_a.each_next_tick do |i, (j, k)|
+      u = Time.now - (k.opts[:retry_interval] || 0) - j
+      if u < 0
+        # retry interval passed, just send it again
+        k.fire
+      else
+        # need to re-add timer
+        EM.add_timer u do k.fire end
       end
-      @retrying_events.clear
     end
+    @retrying_events.clear
   end
 
   def consume_publisher_confirmation ack
