@@ -80,6 +80,8 @@ class Tengine::Mq::Suite
     @tx_pending_events = Array.new
     @retrying_events = Hash.new
     @any_pending_events = Hash.new
+    @hooks = Hash.new do |h, k| h.store k, Array.new end
+
     # 一度も、AMQP.connectを実行する前に、connection に関する例外が発生すると、
     # 再接続などのハンドリングができないので、初期化時に connection への接続までを行います。
     connection
@@ -132,38 +134,24 @@ class Tengine::Mq::Suite
     }
   }
 
+  # mq.connection.on_error { ... } 等は複数回指定すると前回のコールバッ
+  # クを上書きしてしまうのでNG、こちらをご使用ください
+  def add_hook name, &block
+    @mutex.synchronize do
+      @hooks[name] << block
+    end
+  end
+
   def connection(force = false, &block)
     if @connection.nil? || force
-      @connection = AMQP.connect(config[:connection], &block)
-      unless auto_reconnect_delay.nil?
-        @connection.on_tcp_connection_loss do |conn, settings|
-          revoke_retry_timers
-          conn.reconnect(false, auto_reconnect_delay.to_i)
-        end
-        @connection.after_recovery do |conn, settings|
-          @channel = nil
-          @exchange = nil
-          @queue = nil
-        end
-        @connection.on_closed do
-          revoke_retry_timers
-          @connection = nil
-          @channel = nil
-          @exchange = nil
-          @queue = nil
-        end
-      end
+      @connection = setup_connection block
     end
     @connection
   end
 
   def channel(force = false)
     if @channel.nil? || force
-      options = {
-        :prefetch => 1,
-        :auto_recovery => !auto_reconnect_delay.nil?,
-      }
-      @channel = AMQP::Channel.new(connection, options)
+      @channel = setup_channel
     end
     @channel
   end
@@ -210,6 +198,99 @@ class Tengine::Mq::Suite
   #######
   private
   #######
+
+  def setup_connection block
+    mids = %w[
+      before_recovery
+      on_closed
+      on_connection_interruption
+      on_error
+      on_possible_authentication_failure
+      after_recovery
+      on_tcp_connection_failure
+      on_tcp_connection_loss
+    ].map(&:intern)
+
+    callbacks = mids.inject({}) {|r, mid|
+      r.update mid => lambda {|*argv|
+        @hooks[:"connection.#{mid}"].each {|proc|
+          proc.call(*argv)
+        }
+      }
+    }
+
+    config2 = callbacks.merge(config[:connection]) {|k, v1, v2| v2 }
+
+    AMQP.connect(config2, &block).tap do |connection|
+      @mutex.synchronize { mids.each {|i| @hooks[:"connection.#{i}"].clear } };
+
+      unless auto_reconnect_delay.nil?
+        add_hook :'connection.on_tcp_connection_loss' do |conn, settings|
+          revoke_retry_timers
+          conn.reconnect(false, auto_reconnect_delay.to_i)
+        end
+        add_hook :'connection.after_recovery' do |conn, settings|
+          @channel = nil
+          @exchange = nil
+          @queue = nil
+        end
+        add_hook :'connection.on_closed' do |conn, settings|
+          revoke_retry_timers
+          @connection = nil
+          @channel = nil
+          @exchange = nil
+          @queue = nil
+        end
+      end
+
+      callbacks.each_pair do |k, v|
+        begin
+          begin
+            connection.send k, &v
+          rescue RSpec::Mocks::MockExpectationError
+            # @connectoinはmock objectかも...
+          end
+        rescue NameError
+          # RSpecはrequireされていないかも...
+        end
+      end
+
+      begin
+        RSpec
+      rescue NameError
+        # rspec ではないとき(テスト以外)はundefしておく
+        # 本当はテスト時もundefしたいが...
+        klass = class << connection; self; end
+        klass.send :undef_method, *mids
+      end
+    end
+  end
+
+  def setup_channel
+    options = {
+      :prefetch => 1,
+      :auto_recovery => !auto_reconnect_delay.nil?,
+    }
+    AMQP::Channel.new(connection, options).tap do |channel|
+      begin
+        begin
+          channel.on_error do |*argv|
+            @mutex.synchronize do
+              @hooks[:'channel.on_error'].each do |proc|
+                proc.call(*argv)
+              end
+            end
+          end
+        rescue RSpec::Mocks::MockExpectationError
+          # @connectoinはmock objectかも...
+        end
+      rescue NameError
+        # RSpecはrequireされていないかも...
+      end
+    end
+  end
+
+  ####
 
   @@all_pending_events = Hash.new do |h, k| h.store k, 0 end
   @@pending_event = Struct.new :tag, :sender, :event, :opts, :retry, :block
