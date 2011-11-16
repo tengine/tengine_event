@@ -5,21 +5,8 @@ require 'active_support/core_ext/array/extract_options'
 
 class Tengine::Event::Sender
 
-  class RetryError < StandardError
-    attr_reader :event, :retry_count, :source
-    def initialize(event, retry_count, source = nil)
-      @event, @retry_count = event, retry_count
-      @source = source.is_a?(RetryError) ? source.source : source
-    end
-    def message
-      result = "failed %d time(s) to send event %s." % [retry_count, event]
-      if @source
-        result << "  The last source exception was #{@source.inspect}"
-      end
-      result
-    end
-    alias_method :to_s, :message
-  end
+  # 現在不使用。やがて消します。
+  RetryError = Class.new StandardError
 
   attr_reader :mq_suite
   attr_reader :logger

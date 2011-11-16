@@ -78,7 +78,8 @@ class Tengine::Mq::Suite
     @mutex = Mutex.new
     @publisher_confirmation_status = :disconnected
     @tx_pending_events = Array.new
-    @retrying_events = Array.new
+    @retrying_events = Hash.new
+    @any_pending_events = Hash.new
     # 一度も、AMQP.connectを実行する前に、connection に関する例外が発生すると、
     # 再接続などのハンドリングができないので、初期化時に connection への接続までを行います。
     connection
@@ -189,120 +190,166 @@ class Tengine::Mq::Suite
   end
 
   def fire sender, event, opts, retryc, block # :nodoc:
-    defer_until_proper_handshake do
-      begin
-        exchange.publish event.to_json, @config[:exchange][:publish]
-      rescue => e
-        # exchange.publish はたとえば RuntimeError を raise したりするようだ
-        if retryc >= opts[:retry_count]
-          raise ::Tengine::Event::Sender::RetryError.new(event, retryc, e)
-        else
-          e = @@pending_event.new @tag, sender, event, opts, retryc, block
-          idx = EM.add_timer opts[:retry_interval] do e.fire end
-          @retrying_events << [idx, Time.now, e]
-        end
-      else
-        case @publisher_confirmation_status
-        when :unsupported then
-          EM.next_tick do
-            block.call if block
-            unless opts[:keep_connection]
-              EM.next_tick do
-                connection.disconnect do
-                  EM.stop
-                end
-              end
-            end
-          end
-        when :established then
-          @tag += 1
-          e = @@pending_event.new @tag, sender, event, opts, retryc, block
-          @tx_pending_events.push e
-          @@all_pending_events[event] += 1
-        else
-          raise "timing bug.  contact @shyoyuhei with this info: #{@publisher_confirmation_status}"
-        end
-      end
+    ev = @@pending_event.new 0, sender, event, opts, retryc, block
+    @mutex.synchronize do
+      @any_pending_events[ev] = true
+      fire_internal ev
     end
   end
 
   def pending_events_for sender # :nodoc:
-    @tx_pending_events.select {|i| i.sender == sender }.map {|i| i.event }
+    @mutex.synchronize do
+      @any_pending_events.keys.select {|i| i.sender == sender }.map {|i| i.event }
+    end
   end
 
   def self.pending? event # :nodoc:
     @@all_pending_events.has_key? event
   end
 
+  #######
   private
+  #######
 
   @@all_pending_events = Hash.new do |h, k| h.store k, 0 end
   @@pending_event = Struct.new :tag, :sender, :event, :opts, :retry, :block
-  @@pending_event.class_eval do
-    def fire
-      sender.fire event, opts, self.retry + 1, &block # retry is a keyword
+
+  def release_event ev
+    exchange.publish ev.event.to_json, @config[:exchange][:publish]
+  end
+
+  def event_release_failed ev, ex
+    # exchange.publish はたとえば RuntimeError を raise したりするようだ
+    if ev.retry < ev.opts[:retry_count]
+      idx = EM.add_timer ev.opts[:retry_interval] do
+        EM.next_tick do
+          @mutex.synchronize do
+            ev.retry += 1
+            @retrying_events.rehash
+            @any_pending_events.rehash
+            fire_internal ev
+          end
+        end
+      end
+      @retrying_events[ev] = [idx, Time.now]
+    else
+      # inside mutex lock
+      @retrying_events.delete ev
+      @any_pending_events.delete ev
     end
   end
+
+  def event_released ev
+    case @publisher_confirmation_status
+    when :unsupported then
+      EM.next_tick do
+        @mutex.synchronize do
+          @retrying_events.delete ev
+          @any_pending_events.delete ev
+          ev.block.call if ev.block
+          unless ev.opts[:keep_connection]
+            EM.next_tick do
+              connection.disconnect do
+                EM.stop
+              end
+            end
+          end
+        end
+      end
+    when :established then
+      @mutex.synchronize do
+        @tag += 1
+        ev.tag = @tag
+        @tx_pending_events.push ev
+        @@all_pending_events[ev.event] += 1
+        @retrying_events.rehash
+        @any_pending_events.rehash
+      end
+    else
+      raise "timing bug.  contact @shyoyuhei with this info: #{@publisher_confirmation_status}"
+    end
+  end
+
+  def fire_internal ev
+    # inside mutex lock
+    defer_until_proper_handshake do
+      begin
+        release_event ev
+      rescue => ex
+        event_release_failed ev, ex
+      else
+        event_released ev
+      end
+    end
+  end
+
+  #####
 
   def revoke_retry_timers
     @mutex.synchronize do
       if @publisher_confirmation_initiated != :disconnected
         @publisher_confirmation_initiated = :disconnected
-        @retrying_events.each do |(idx, *)|
+        @retrying_events.each_value do |(idx, *)|
           EM.stop_timer idx if idx
         end
         # all pending events are hereby considered lost
         @tx_pending_events.each do |e|
-          @retrying_events << [nil, 0, ev]
+          @retrying_events[e] = [nil, Time.at(0)]
         end
       end
     end
   end
 
   def reinvoke_retry_timers
-    @retrying_events.each_next_tick do |(i, j, k)|
-      u = Time.now - (k.opts[:retry_interval] || 0) - j
-      if u < 0
-        # retry interval passed, just send it again
-        k.fire
-      else
-        # need to re-add timer
-        EM.add_timer u do k.fire end
+    @mutex.synchronize do
+      @retrying_events.each_pair.each_next_tick do |i, (j, k)|
+        u = Time.now - (k.opts[:retry_interval] || 0) - j
+        if u < 0
+          # retry interval passed, just send it again
+          k.fire
+        else
+          # need to re-add timer
+          EM.add_timer u do k.fire end
+        end
       end
+      @retrying_events.clear
     end
-    @retrying_events.clear
   end
 
   def consume_publisher_confirmation ack
-    f = !@tx_pending_events.empty?
-    n = ack.delivery_tag
-    ok = []
-    ng = []
-    if ack.multiple
-      ok, @tx_pending_events = @tx_pending_events.partition {|i| i.tag <= n }
-    else
-      ng, @tx_pending_events = @tx_pending_events.partition {|i| i.tag < n }
-      if @tx_pending_events.empty?
-        # the packet in quesion is lost?
-      elsif e = @tx_pending_events.shift
-        ok = [e]
-      end
-    end
-    f ||= !ng.empty?
-    ng.each_next_tick {|e| e.sender.fire e.event, e.opts, e.retry + 1, &e.block }
-    ok.each_next_tick {|e| e.block.call if e.block }
-    ok.each do |e|
-      x = @@all_pending_events[e.event] - 1
-      if x <= 0
-        @@all_pending_events.delete e.event
+    @mutex.synchronize do
+      f = !@tx_pending_events.empty?
+      n = ack.delivery_tag
+      ok = []
+      ng = []
+      if ack.multiple
+        ok, @tx_pending_events = @tx_pending_events.partition {|i| i.tag <= n }
       else
-        @@all_pending_events[e.event] = x
+        ng, @tx_pending_events = @tx_pending_events.partition {|i| i.tag < n }
+        if @tx_pending_events.empty?
+          # the packet in quesion is lost?
+        elsif e = @tx_pending_events.shift
+          ok = [e]
+        end
       end
-    end
-    f = ok.inject(f) {|r, e| r | e.opts[:keep_connection] }
-    if f == false and @tx_pending_events.empty?
-      @connection.disconnect do
-        EM.stop
+      f ||= !ng.empty?
+      ng.each_next_tick {|e| e.sender.fire e.event, e.opts, e.retry + 1, &e.block }
+      ok.each_next_tick {|e| e.block.call if e.block }
+      ok.each do |e|
+        @any_pending_events.delete e
+        @retrying_events.delete e
+        x = @@all_pending_events[e.event] - 1
+        if x <= 0
+          @@all_pending_events.delete e.event
+        else
+          @@all_pending_events[e.event] = x
+        end
+      end
+      f = ok.inject(f) {|r, e| r | e.opts[:keep_connection] }
+      if f == false and @tx_pending_events.empty?
+        @connection.disconnect do
+          EM.stop
+        end
       end
     end
   end
@@ -356,22 +403,21 @@ you to use a relatively recent version of RabbitMQ.                   [BEWARE!]
   end
 
   def defer_until_proper_handshake
-    @mutex.synchronize do
-      case @publisher_confirmation_status when :established, :unsupported
-        EM.next_tick do yield end
-      else
-        raise ArgumentError, "no block given" unless block_given?
-        Tengine::Core.stdout_logger.info "waiting for MQ to be set up..." if defined? Tengine::Core
+    # inside of mutex lock
+    case @publisher_confirmation_status when :established, :unsupported
+      EM.next_tick do yield end
+    else
+      raise ArgumentError, "no block given" unless block_given?
+      Tengine::Core.stdout_logger.info "waiting for MQ to be set up..." if defined? Tengine::Core
 
-        #              vvv -- note this lane
-        d4 = lambda do |a| yield                                           end
-        d3 = lambda do     sleep 0.1 until initiate_publisher_confirmation end
-        d2 = lambda do |a| EM.defer d3, d4                                 end
-        d1 = lambda do     sleep 0.1 until connection.connected?           end
-        d0 = lambda do     EM.defer d1, d2                                 end
+      #              vvv -- note this lane
+      d4 = lambda do |a| yield                                           end
+      d3 = lambda do     sleep 0.1 until initiate_publisher_confirmation end
+      d2 = lambda do |a| EM.defer d3, d4                                 end
+      d1 = lambda do     sleep 0.1 until connection.connected?           end
+      d0 = lambda do     EM.defer d1, d2                                 end
 
-        d0.call
-      end
+      d0.call
     end
   end
 end
