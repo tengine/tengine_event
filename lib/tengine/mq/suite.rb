@@ -234,6 +234,7 @@ class Tengine::Mq::Suite
           conn.reconnect(false, auto_reconnect_delay.to_i)
         end
         add_hook :'connection.after_recovery' do |conn, settings|
+          reinvoke_retry_timers
           @channel = nil
           @exchange = nil
           @queue = nil
@@ -321,6 +322,8 @@ class Tengine::Mq::Suite
       # inside mutex lock
       @retrying_events.delete ev
       @any_pending_events.delete ev
+      # 送信失敗かつコネクション維持しないということはここで停止すべき
+      stop unless ev.opts[:keep_connection]
     end
   end
 
@@ -332,13 +335,7 @@ class Tengine::Mq::Suite
           @retrying_events.delete ev
           @any_pending_events.delete ev
           ev.block.call if ev.block
-          unless ev.opts[:keep_connection]
-            EM.next_tick do
-              connection.disconnect do
-                EM.stop
-              end
-            end
-          end
+          stop unless ev.opts[:keep_connection]
         end
       end
     when :established then
@@ -351,7 +348,7 @@ class Tengine::Mq::Suite
         @any_pending_events.rehash
       end
     else
-      raise "timing bug.  contact @shyoyuhei with this info: #{@publisher_confirmation_status}"
+      raise "timing bug.  contact @shyouhei with this info: #{@publisher_confirmation_status}"
     end
   end
 
@@ -388,13 +385,13 @@ class Tengine::Mq::Suite
   def reinvoke_retry_timers
     #inside mutex lock
     @retrying_events.each_pair.to_a.each_next_tick do |i, (j, k)|
-      u = Time.now - (k.opts[:retry_interval] || 0) - j
+      u = (k + (i.opts[:retry_interval] || 0)) - Time.now
       if u < 0
         # retry interval passed, just send it again
-        k.fire
+        fire_internal i
       else
         # need to re-add timer
-        EM.add_timer u do k.fire end
+        EM.add_timer u do i.fire end
       end
     end
     @retrying_events.clear
@@ -402,7 +399,7 @@ class Tengine::Mq::Suite
 
   def consume_publisher_confirmation ack
     @mutex.synchronize do
-      f = !@tx_pending_events.empty?
+      f = @tx_pending_events.empty?
       n = ack.delivery_tag
       ok = []
       ng = []
@@ -450,7 +447,7 @@ class Tengine::Mq::Suite
   def initiate_publisher_confirmation
     @mutex.synchronize do
       case @publisher_confirmation_status
-      when :estabished, :unsupported
+      when :established, :unsupported
         return true
       when :handshaking
         # in progress
