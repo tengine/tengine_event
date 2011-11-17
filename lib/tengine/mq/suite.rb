@@ -195,6 +195,11 @@ class Tengine::Mq::Suite
     @@all_pending_events.has_key? event
   end
 
+  def stop
+    EM.defer(lambda{ sleep 0.1 until @mutex.synchronize { @any_pending_events.empty? } },
+             lambda{|a| connection.disconnect { if block_given? then yield else EM.stop end }})
+  end
+
   #######
   private
   #######
