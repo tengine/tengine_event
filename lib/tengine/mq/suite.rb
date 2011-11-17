@@ -347,7 +347,7 @@ class Tengine::Mq::Suite
         @any_pending_events.rehash
       end
     else
-      raise "timing bug.  contact @shyoyuhei with this info: #{@publisher_confirmation_status}"
+      raise "timing bug.  contact @shyouhei with this info: #{@publisher_confirmation_status}"
     end
   end
 
@@ -446,7 +446,7 @@ class Tengine::Mq::Suite
   def initiate_publisher_confirmation
     @mutex.synchronize do
       case @publisher_confirmation_status
-      when :estabished, :unsupported
+      when :established, :unsupported
         return true
       when :handshaking
         # in progress
