@@ -229,6 +229,7 @@ class Tengine::Mq::Suite
           conn.reconnect(false, auto_reconnect_delay.to_i)
         end
         add_hook :'connection.after_recovery' do |conn, settings|
+          reinvoke_retry_timers
           @channel = nil
           @exchange = nil
           @queue = nil
@@ -383,13 +384,13 @@ class Tengine::Mq::Suite
   def reinvoke_retry_timers
     #inside mutex lock
     @retrying_events.each_pair.to_a.each_next_tick do |i, (j, k)|
-      u = Time.now - (k.opts[:retry_interval] || 0) - j
+      u = (k + (i.opts[:retry_interval] || 0)) - Time.now
       if u < 0
         # retry interval passed, just send it again
-        k.fire
+        fire_internal i
       else
         # need to re-add timer
-        EM.add_timer u do k.fire end
+        EM.add_timer u do i.fire end
       end
     end
     @retrying_events.clear
