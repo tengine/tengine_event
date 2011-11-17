@@ -317,6 +317,8 @@ class Tengine::Mq::Suite
       # inside mutex lock
       @retrying_events.delete ev
       @any_pending_events.delete ev
+      # 送信失敗かつコネクション維持しないということはここで停止すべき
+      stop unless ev.opts[:keep_connection]
     end
   end
 
@@ -328,13 +330,7 @@ class Tengine::Mq::Suite
           @retrying_events.delete ev
           @any_pending_events.delete ev
           ev.block.call if ev.block
-          unless ev.opts[:keep_connection]
-            EM.next_tick do
-              connection.disconnect do
-                EM.stop
-              end
-            end
-          end
+          stop unless ev.opts[:keep_connection]
         end
       end
     when :established then
@@ -398,7 +394,7 @@ class Tengine::Mq::Suite
 
   def consume_publisher_confirmation ack
     @mutex.synchronize do
-      f = !@tx_pending_events.empty?
+      f = @tx_pending_events.empty?
       n = ack.delivery_tag
       ok = []
       ng = []
