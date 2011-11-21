@@ -82,6 +82,29 @@ class Tengine::Mq::Suite
     @any_pending_events = Hash.new
     @hooks = Hash.new do |h, k| h.store k, Array.new end
 
+    # default hooks
+    unless @auto_reconnect_delay.nil?
+      add_hook :'connection.on_tcp_connection_loss' do |conn, settings|
+        revoke_retry_timers
+        conn.reconnect(false, auto_reconnect_delay.to_i)
+      end
+      add_hook :'connection.after_recovery' do |conn, settings|
+        reinvoke_retry_timers
+        @channel = nil
+        @exchange = nil
+        @queue = nil
+        @publisher_confirmation_status = :disconnected
+      end
+      add_hook :'connection.on_closed' do |conn, settings|
+        revoke_retry_timers
+        @connection = nil
+        @channel = nil
+        @exchange = nil
+        @queue = nil
+        @publisher_confirmation_status = :disconnected
+      end
+    end
+
     # 一度も、AMQP.connectを実行する前に、connection に関する例外が発生すると、
     # 再接続などのハンドリングができないので、初期化時に connection への接続までを行います。
     connection
@@ -226,32 +249,6 @@ class Tengine::Mq::Suite
     config2 = callbacks.merge(config[:connection]) {|k, v1, v2| v2 }
 
     AMQP.connect(config2, &block).tap do |connection|
-      @mutex.synchronize { mids.each {|i| @hooks[:"connection.#{i}"].clear } };
-
-      unless auto_reconnect_delay.nil?
-        add_hook :'connection.on_tcp_connection_loss' do |conn, settings|
-          revoke_retry_timers
-          conn.reconnect(false, auto_reconnect_delay.to_i)
-        end
-        add_hook :'connection.after_recovery' do |conn, settings|
-          reinvoke_retry_timers
-          @channel = nil
-          @exchange = nil
-          @queue = nil
-          @hooks.reject! {|k, v| k =~ /\Achannel/ }
-          @publisher_confirmation_status = :disconnected
-        end
-        add_hook :'connection.on_closed' do |conn, settings|
-          revoke_retry_timers
-          @connection = nil
-          @channel = nil
-          @exchange = nil
-          @queue = nil
-          @hooks.clear
-          @publisher_confirmation_status = :disconnected
-        end
-      end
-
       callbacks.each_pair do |k, v|
         begin
           begin
