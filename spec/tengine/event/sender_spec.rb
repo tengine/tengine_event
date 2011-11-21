@@ -226,34 +226,36 @@ describe "Tengine::Event::Sender" do
         subject.pending_events.size.should < n
       end
     end
-  end
 
-  describe :stop do
-    subject { Tengine::Event::Sender.new(:exchange => {:name => "exchange1"}) }
+    describe :stop do
+      subject { Tengine::Event::Sender.new(:exchange => {:name => "exchange1"}) }
 
-    it "EMのイベントループを抜ける" do
-      EM.run do
-        sender.stop
-      end
-      # ここに到達すればOK
-    end
-
-    it "ペンディングのイベントが送信されるまではEMのイベントループにとどまる" do
-      event = Tengine::Event.new(:event_type_name => :foo, :key => "uniq_key")
-      x = false
-      @mock_exchange.stub(:publish).with(expected_event.to_json, :persistent=>true) do
-        if x = !x
-          raise "foo"
-        else
-          next "foo"
+      it "EMのイベントループを抜ける" do
+        @mock_exchange.stub(:publish).with(an_instance_of(String), an_instance_of(Hash))
+        EM.run do
+          subject.fire("something", :retry_count => 0)
+          subject.stop
         end
+        # ここに到達すればOK
       end
-      block_called = false
-      EM.run {
-        @sender.fire(expected_event, :retry_count => 1) { block_called = true }
-        @sender.stop
-      }
-      block_called.should be_true
+
+      it "ペンディングのイベントが送信されるまではEMのイベントループにとどまる" do
+        event = Tengine::Event.new(:event_type_name => :foo, :key => "uniq_key")
+        x = false
+        @mock_exchange.stub(:publish).with(event.to_json, :persistent=>true) do
+          if x = !x
+            raise "foo"
+          else
+            next "foo"
+          end
+        end
+        block_called = false
+        EM.run {
+          subject.fire(event, :retry_count => 1) { block_called = true }
+          subject.stop
+        }
+        block_called.should be_true
+      end
     end
   end
 end
