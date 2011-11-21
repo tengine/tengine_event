@@ -238,6 +238,8 @@ class Tengine::Mq::Suite
           @channel = nil
           @exchange = nil
           @queue = nil
+          @hooks.reject! {|k, v| k =~ /\Achannel/ }
+          @publisher_confirmation_status = :disconnected
         end
         add_hook :'connection.on_closed' do |conn, settings|
           revoke_retry_timers
@@ -245,6 +247,8 @@ class Tengine::Mq::Suite
           @channel = nil
           @exchange = nil
           @queue = nil
+          @hooks.clear
+          @publisher_confirmation_status = :disconnected
         end
       end
 
