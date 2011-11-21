@@ -116,4 +116,94 @@ describe "Tengine::Mq::Suite" do
 
   end
 
+  context "add_hook" do
+    before :all do
+      require 'socket'
+      @n = rand(32768)
+      @t = nil
+      @e = StandardError.new
+      begin
+        @t = Thread.start do
+          begin
+            Socket.tcp_server_loop(nil, @n) do |sock, addr|
+              Thread.start(sock, addr) do |s, a|
+                Thread.stop # stops forever
+              end
+            end
+          rescue @e
+            # end of server
+          end
+        end
+        @t.abort_on_exception = true
+        sleep 0.5 # このくらいあればlistenできるでしょ
+      rescue
+        @n = rand(32768)
+        retry
+      end
+    end
+
+    after :all do
+      @t.raise @e
+    end
+
+    before do
+      pending "this spec needs 1.9.2" if RUBY_VERSION < "1.9.2"
+    end
+
+    it "hookを追加する" do
+      yielded = false
+      EM.run do
+        mq = Tengine::Mq::Suite.new(:connection => { :host => "localhost", :port => @n })
+        mq.add_hook(:"connection.on_closed") do
+          yielded = true
+        end
+        mq.stop
+      end
+      yielded.should be_true
+    end
+
+    it "hookを保持する" do
+      mq = nil
+
+      # 1st time
+      yielded = 0
+      EM.run do
+        mq = Tengine::Mq::Suite.new(:connection => { :host => "localhost", :port => @n })
+        mq.add_hook(:"connection.on_closed") do
+          yielded += 1
+        end
+        mq.stop
+      end
+
+      # 2nd time
+      yielded = 0
+      EM.run do
+        mq.stop
+      end
+      yielded.should == 1
+    end
+
+    it "hookを保持する #2" do
+      mq = nil
+
+      # 1st time
+      yielded = 0
+      EM.run do
+        mq = Tengine::Mq::Suite.new(:connection => { :host => "localhost", :port => @n })
+        mq.add_hook(:"channel.on_error") do
+          yielded += 1
+        end
+        mq.channel.exec_callback_once_yielding_self(:error, "channel close reason object")
+        mq.stop
+      end
+
+      # 2nd time
+      yielded = 0
+      EM.run do
+        mq.channel.exec_callback_once_yielding_self(:error, "channel close reason object")
+        mq.stop
+      end
+      yielded.should == 1
+    end
+  end
 end
