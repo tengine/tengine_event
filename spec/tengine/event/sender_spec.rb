@@ -227,6 +227,16 @@ describe "Tengine::Event::Sender" do
       end
     end
 
+    context "複数のEM event loopにまたがったfire" do
+      subject { Tengine::Event::Sender.new(:exchange => {:name => "exchange1"}, :sender => {:retry_interval => 0}) }
+      it "https://www.pivotaltracker.com/story/show/21252625" do
+        @mock_exchange.stub(:publish).with(an_instance_of(String), {:persistent=>true})
+        EM.run do subject.fire("foo") end
+        EM.run do subject.fire("foo") end
+        # ここまでくればOK
+      end
+    end
+
     describe :stop do
       subject { Tengine::Event::Sender.new(:exchange => {:name => "exchange1"}) }
 
