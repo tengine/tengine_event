@@ -541,7 +541,7 @@ class Tengine::Mq::Suite
     synchronize do
       obj = ivar? klass
       if obj
-        logger :debug, "Deprecation warning.  Method %s called from %s", klass, caller[0]
+        logger :debug, "Deprecation warning.  Method %s called from %s", klass, caller[3]
       else
         raise RuntimeError, "found a timing issue. please report to @shyouhei with a reproducible sample code."
       end
