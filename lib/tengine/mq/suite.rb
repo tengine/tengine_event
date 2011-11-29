@@ -347,7 +347,6 @@ class Tengine::Mq::Suite
         if block_given? then
           yield
         else
-          EM.add_periodic_timer(0.1) { p EM.reactor_running? }
           EM.stop
         end
       end
@@ -572,16 +571,16 @@ class Tengine::Mq::Suite
 
   def generate_connection cb
     cfg = cb.merge @config[:connection] do |k, v1, v2| v2 end
-    AMQP.connect cfg do |connection|
-      yield connection
+    AMQP.connect cfg do |conn|
+      yield conn
     end
   end
 
   def generate_channel *;
     cfg = @config[:channel]
     ensures :connection do |conn|
-      AMQP::Channel.new conn, cfg do |channel|
-        yield channel
+      AMQP::Channel.new conn, cfg do |ch|
+        yield ch
       end
     end
   end
@@ -595,9 +594,9 @@ class Tengine::Mq::Suite
         que.bind xchg
         yield que
       else
-        @channel.queue name, cfg do |queue|
-          queue.bind xchg, :nowait => false do
-            yield queue
+        @channel.queue name, cfg do |que|
+          que.bind xchg, :nowait => false do
+            yield que
           end
         end
       end
@@ -609,13 +608,13 @@ class Tengine::Mq::Suite
     name = cfg.delete :name
     type = cfg.delete :type
     cfg.delete :publish # not needed here
-    ensures :channel do |channel|
+    ensures :channel do |ch|
       if cfg[:nowait]
-        xchg = AMQP::Exchange.new channel, type.intern, name, cfg
+        xchg = AMQP::Exchange.new ch, type.intern, name, cfg
         yield xchg
       else
-        AMQP::Exchange.new channel, type.intern, name, cfg do |exchange|
-          yield exchange
+        AMQP::Exchange.new ch, type.intern, name, cfg do |xchg|
+          yield xchg
         end
       end
     end
@@ -972,8 +971,8 @@ you to use a relatively recent version of RabbitMQ.                   [BEWARE!]
       EM.next_tick do
         synchronize do
           @retrying_events.delete ev
-          @any_pending_events.delete ev
-          @publishng_events.reject! {|i| i == ev }
+          @pending_events.delete ev
+          @publishing_events.reject! {|i| i == ev }
           @condvar.broadcast
           ev.block.call if ev.block
           stop unless ev.opts[:keep_connection]
