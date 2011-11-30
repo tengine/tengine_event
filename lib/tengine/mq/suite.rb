@@ -3,6 +3,7 @@ require 'tengine/mq'
 
 require 'active_support/core_ext/hash/keys'
 require 'active_support/core_ext/hash/deep_merge'
+require 'active_support/core_ext/hash/deep_dup'
 require 'amqp'
 require 'amqp/extensions/rabbitmq'
 
@@ -43,6 +44,21 @@ class Hash
   # Intuitive, see the source.
   def compact
     dup.tap {|i| i.compact! }
+  end
+
+  # Destructive recursive symbolize of keys
+  def deep_symbolize_keys!
+    each_value do |v|
+      case v when Hash
+        v.deep_symbolize_keys!
+      end
+    end
+    symbolize_keys!
+  end
+
+  # Intuitive, see the source.
+  def deep_symbolize_keys
+    deep_dup.tap {|i| i.deep_symbolize_keys! }
   end
 end
 
@@ -271,7 +287,7 @@ class Tengine::Mq::Suite
         },
       },
     }
-    @config.deep_merge! cfg.to_hash.symbolize_keys.compact
+    @config.deep_merge! cfg.to_hash.deep_symbolize_keys.compact
     @config.deep_freeze
     install_default_hooks
   end
@@ -989,6 +1005,7 @@ you to use a relatively recent version of RabbitMQ.                   [BEWARE!]
       # ackなし、next_tickをもって送信終了と見なす
       EM.next_tick do
         synchronize do
+          rehash_them_all
           @retrying_events.delete ev
           @pending_events.delete ev
           @publishing_events.reject! {|i| i == ev }

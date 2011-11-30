@@ -70,6 +70,18 @@ describe Hash do
       hh.should_not include(:baz)
     end
   end
+
+  describe "#deep_symbolize_keys!" do
+    subject { { "q" => { "w" => { "e" => { "r" => { "t" => { "y" => "u" } } } } } }.tap{|i| i.deep_symbolize_keys! } }
+    it "再帰的、破壊的なsymbloze" do
+      subject[:q].should_not be_nil
+      subject[:q][:w].should_not be_nil
+      subject[:q][:w][:e].should_not be_nil
+      subject[:q][:w][:e][:r].should_not be_nil
+      subject[:q][:w][:e][:r][:t].should_not be_nil
+      subject[:q][:w][:e][:r][:t][:y].should_not be_nil
+    end
+  end
 end
 
 describe Tengine::Mq::Suite do
@@ -77,7 +89,7 @@ describe Tengine::Mq::Suite do
     describe "#initialize" do
       context "no args" do
         subject { Tengine::Mq::Suite.new }
-        its (:config) { should == {
+        its(:config) { should == {
             :sender                 => {
               :keep_connection      => false,
               :retry_interval       => 1,
@@ -129,7 +141,7 @@ describe Tengine::Mq::Suite do
 
       context "hash arg" do
         subject { Tengine::Mq::Suite.new :sender => { :keep_connection => false } }
-        its (:config) { should have_key(:sender) }
+        its(:config) { should have_key(:sender) }
         it "merges the argument" do
           subject.config[:sender][:keep_connection].should be_false
           subject.config[:sender].should have_key(:retry_interval)
@@ -717,11 +729,123 @@ describe Tengine::Mq::Suite do
   end
 
   context "mock/stubによる試験" do
+    class Mocker
+      class << self
+        alias_method :[], :new
+      end
+      def initialize inspect
+        @inspect = inspect
+      end
+      attr_reader :inspect
+    end
+
+    # for exchange
+    class RSpec::Mocks::Mock
+      def publish str, opt
+        $the_messages.push str
+      end
+    end
+
+    class RSpec::Mocks::MessageExpectation
+      def and_emyield *val
+        index = Object.new
+        @emvals ||= Hash.new
+        @emvals[index] = val
+        def self.invoke_with_yield(&block)
+          if block.nil?
+            @error_generator.raise_missing_block_error @args_to_yield
+          end
+          value = nil
+          @args_to_yield.each do |args_to_yield_this_time|
+            if Array === args_to_yield_this_time[0] and @emvals.key?(args_to_yield_this_time[0][0])
+              value = EM.next_tick do
+                block.yield(*args_to_yield_this_time[0][1])
+              end
+            else
+              if block.arity > -1 && args_to_yield_this_time.length != block.arity
+                @error_generator.raise_wrong_arity_error args_to_yield_this_time, block.arity
+              end
+              value = eval_block(*args_to_yield_this_time, &block)
+            end
+          end
+          value
+        end
+        and_yield([index, val])
+      end
+    end
+
+    before do
+      $the_messages   = EM::Queue.new
+      @the_connection = mock(Mocker["connection"])
+      @the_channel_id = Numeric.new
+      @the_channel    = mock(Mocker["channel"])
+      @the_exchange   = mock(Mocker["exchange"])
+      @the_queue      = mock(Mocker["queue"])
+      @callbacks      = Hash.new do |h, k|
+        h[k]          = Hash.new 
+      end
+      AMQP.stub(:connect).with(an_instance_of(Hash)) do |h, block|
+        EM.next_tick do
+          block.yield @the_connection
+          if h[:port] != 5672
+            @callbacks[@the_connection][:on_tcp_connection_failure].yield @the_connection if @callbacks[@the_connection][:on_tcp_connection_failure]
+            raise AMQP::Error, "fake error."
+          end
+        end
+      end
+      AMQP::Channel.stub(:next_channel_id).and_return(@the_channel_id)
+      AMQP::Channel.stub(:new).with(@the_connection, @the_channel_id, an_instance_of(Hash)).and_emyield(@the_channel).and_return(@the_channel)
+      AMQP::Exchange.stub(:new).with(@the_channel, an_instance_of(Symbol), an_instance_of(String), an_instance_of(Hash)).and_emyield(@the_exchange).and_return(@the_exchange)
+      @the_connection.stub(:disconnect) do |block|
+        EM.next_tick do
+          @callbacks[@the_connection][:on_closed].yield @the_connection if @callbacks[@the_connection][:on_closed]
+          block.yield
+          $the_messages = EM::Queue.new # reset
+        end
+      end
+      @the_connection.stub(:server_capabilities).and_return(Hash.new)
+      @the_connection.stub(:before_recovery)
+      @the_connection.stub(:after_recovery)
+      @the_connection.stub(:on_connection_interruption)
+      @the_connection.stub(:on_closed) do |block| @callbacks[@the_connection][:on_closed] = block end
+      @the_connection.stub(:on_possible_authentication_failure)
+      @the_connection.stub(:on_tcp_connection_failure) do |block| @callbacks[@the_connection][:on_tcp_connection_failure] = block end
+      @the_connection.stub(:on_tcp_connection_loss)
+      @the_channel.stub(:queue).with(an_instance_of(String), an_instance_of(Hash)).and_emyield(@the_queue).and_return(@the_queue)
+      @the_channel.stub(:close).and_yield
+      @the_channel.stub(:before_recovery)
+      @the_channel.stub(:after_recovery)
+      @the_channel.stub(:on_connection_interruption)
+      @the_channel.stub(:on_error) do |block| @callbacks[@the_channel][:on_error] = block end
+      @the_channel.stub(:exec_callback_once_yielding_self).with(:error, "channel close reason object") do
+        EM.next_tick do
+          @callbacks[@the_channel][:on_error].yield @the_channel if @callbacks[@the_channel][:on_error]
+        end
+      end
+      @the_exchange.stub(:publish).with(an_instance_of(String), an_instance_of(Hash)) do |str, opt|
+        $the_messages.push str
+      end
+      @the_exchange.stub(:before_recovery)
+      @the_exchange.stub(:after_recovery)
+      @the_exchange.stub(:on_connection_interruption)
+      @the_queue.stub(:bind).with(@the_exchange, an_instance_of(Hash)).and_emyield
+      @the_queue.stub(:subscribe).with(an_instance_of(Hash)) do |h, block|
+        cb = lambda do |ev|
+          header = AMQP::Header.new @the_channel, nil, Hash.new
+          header.stub(:ack)
+          block.yield header, ev
+          $the_messages.pop(&cb)
+        end
+        EM.next_tick do
+          $the_messages.pop(&cb)
+        end
+      end
+      @the_queue.stub(:before_recovery)
+      @the_queue.stub(:after_recovery)
+      @the_queue.stub(:on_connection_interruption)
+    end
+
     let(:the_config) { Hash.new }
     it_should_behave_like "Tengine::Mq::Suite"
-
-    before :all do
-      pending "mocks to be written"
-    end
   end
 end
