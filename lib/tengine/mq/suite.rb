@@ -596,7 +596,7 @@ class Tengine::Mq::Suite
   def generate_channel *;
     cfg = @config[:channel]
     ensures :connection do |conn|
-      AMQP::Channel.new conn, cfg do |ch|
+      AMQP::Channel.new conn, AMQP::Channel.next_channel_id, cfg do |ch|
         yield ch
       end
     end
