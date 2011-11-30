@@ -35,15 +35,26 @@ module Enumerable
 end
 
 class Hash
-  # destructive elimination of nil
+  # Destructive elimination of nil, like Array#compact!
   def compact!
     reject! do |k, v|
       v.nil?
     end
   end
 
+  # Intuitive, see the source.
   def compact
     dup.tap {|i| i.compact! }
+  end
+end
+
+if RUBY_VERSION < "1.9.3"
+  class Module
+    private
+    # Suppresses no-method error for earlier rubies
+    def private_constant name
+      # do nothing
+    end
   end
 end
 
@@ -53,10 +64,11 @@ class Tengine::Mq::Suite
   private
   #######
 
-  @@pending_event = Struct.new :tag, :sender, :event, :opts, :retry, :block
+  PendingEvent = Struct.new :tag, :sender, :event, :opts, :retry, :block
+  private_constant :PendingEvent
 
   # This is to accumulate a set of exceptions happend at a series of executions.
-  @@exceptions_container = Class.new RuntimeError do
+  class ExceptionsContainer < RuntimeError
     def initialize
       super
       @set = Array.new
@@ -85,6 +97,7 @@ class Tengine::Mq::Suite
       end
     end
   end
+  private_constant :ExceptionsContainer
 
   # Some (not all) of the descriptions below are quoted from the AMQP gem's yardoc.
   #
@@ -321,7 +334,7 @@ class Tengine::Mq::Suite
   # @option opts          [Numeric] :retry_count      Max count of retry attempts.
   def fire sender, event, opts, block
     cfg = @config[:sender].merge opts.compact
-    e = @@pending_event.new 0, sender, event, cfg, 0, block
+    e = PendingEvent.new 0, sender, event, cfg, 0, block
     synchronize do
       @firing_queue.push e # serialize
       @pending_events[e] = true
@@ -513,7 +526,7 @@ class Tengine::Mq::Suite
   # @return [Proc] a callback.
   def callback_entity klass, mid
     lambda do |*argv|
-      exceptions = @@exceptions_container.new
+      exceptions = ExceptionsContainer.new
       begin
         @hooks[:everything].reverse_each do |proc|
           begin

@@ -5,7 +5,7 @@ require_relative '../../../lib/tengine/mq/suite'
 
 # ログを黙らせたり喋らせたりする
 require 'amq/client'
-if $debug
+if $DEBUG
   require 'logger'
   AMQP::Session.logger = Tengine.logger = Logger.new(STDERR)
 else
@@ -203,7 +203,6 @@ describe Tengine::Mq::Suite do
 
       it "hookを保持する" do
         mq = nil
-
         # 1st time
         yielded = 0
         EM.run do
