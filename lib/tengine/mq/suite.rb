@@ -591,6 +591,10 @@ class Tengine::Mq::Suite
     AMQP.connect cfg do |conn|
       yield conn
     end
+  rescue AMQP::TCPConnectionFailed
+    # on_tcp_connection_failrueは指定しているのだけれどそれでもこの例外はあがってくるのだろうか? よくわからない
+    # いちおう同じことをさせておく
+    cfg[:on_tcp_connection_failrue].yield cfg
   end
 
   def generate_channel *;
@@ -947,14 +951,12 @@ you to use a relatively recent version of RabbitMQ.                   [BEWARE!]
   end
 
   def fire_internal ev
-    begin
-      publish ev
-    rescue Exception => ex
-      # exchange.publish はたとえば RuntimeError を raise したりするようだ
-      publish_failed ev, ex
-    else
-      published ev
-    end
+    publish ev
+  rescue Exception => ex
+    # exchange.publish はたとえば RuntimeError を raise したりするようだ
+    publish_failed ev, ex
+  else
+    published ev
   end
 
   def publish ev
