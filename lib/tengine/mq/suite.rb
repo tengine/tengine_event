@@ -5,8 +5,6 @@ require 'active_support/core_ext/hash/keys'
 require 'active_support/core_ext/hash/deep_merge'
 require 'amqp'
 require 'amqp/extensions/rabbitmq'
-require 'thread'
-require 'pp'
 
 module Enumerable
   def each_next_tick
@@ -481,19 +479,25 @@ class Tengine::Mq::Suite
   # habit (if not a bug), and we pay a considerable cost to avoid them here.  This method is far from being lightweight especially when
   # recursive locking happens.
   def synchronize
-    @mutex.lock
-  rescue ThreadError => e
-    # A deadlock was detected, which means of course, we have the lock.
-    bt = e.backtrace.join "\n\tfrom "
-    logger :debug, "Hey! this is a bad habit.  Can't you avoid it?\n\tfrom %s", bt
-    yield
-    # you must not unlock the mutex now
-  else
-    # blocked and gain the lock
     begin
-      yield
+      @mutex.lock
+    rescue ThreadError => e
+      # A deadlock was detected, which means of course, we have the lock.
+      bt = e.backtrace.join "\n\tfrom "
+      logger :debug, "%s\n\tfrom %s", e, bt
     ensure
-      @mutex.unlock
+      begin
+        return yield
+      ensure
+        begin
+          @mutex.unlock
+        rescue ThreadError => e
+          # @mutex might  magically be unlocked...   For instance, the execution  context might have  been splitted from inside  of the
+          # yielded block.  That case, the context who reached here do not own @mutex so should not unlock.
+          bt = e.backtrace.join "\n\tfrom "
+          logger :debug, "%s\n¥tfrom %s\n", e, bt
+        end
+      end
     end
   end
 
