@@ -1,76 +1,16 @@
 # -*- coding: utf-8 -*-
 require 'tengine/mq'
 
-require 'active_support/core_ext/hash/keys'
+require 'active_support/version'
 require 'active_support/core_ext/hash/deep_merge'
-require 'active_support/core_ext/hash/deep_dup'
+require 'tengine/support/core_ext/hash/compact'
+require 'tengine/support/core_ext/hash/deep_dup'
+require 'tengine/support/core_ext/hash/keys'
+require 'tengine/support/core_ext/enumerable/each_next_tick'
+require 'tengine/support/core_ext/enumerable/deep_freeze'
+require 'tengine/support/core_ext/module/private_constant'
 require 'amqp'
 require 'amqp/extensions/rabbitmq'
-
-module Enumerable
-  def each_next_tick
-    raise ArgumentError, "no block given" unless block_given?
-    nop = lambda do end
-    self.reverse_each.inject nop do |block, obj|
-      lambda do
-        EM.next_tick do
-          yield obj
-          block.call
-        end
-      end
-    end.call
-  end
-
-  def deep_freeze
-    each do |i|
-      case i when Enumerable
-        i.deep_freeze
-      else
-        i.freeze
-      end
-    end
-    freeze
-  end
-end
-
-class Hash
-  # Destructive elimination of nil, like Array#compact!
-  def compact!
-    reject! do |k, v|
-      v.nil?
-    end
-  end
-
-  # Intuitive, see the source.
-  def compact
-    dup.tap {|i| i.compact! }
-  end
-
-  # Destructive recursive symbolize of keys
-  def deep_symbolize_keys!
-    each_value do |v|
-      case v when Hash
-        v.deep_symbolize_keys!
-      end
-    end
-    symbolize_keys!
-  end
-
-  # Intuitive, see the source.
-  def deep_symbolize_keys
-    deep_dup.tap {|i| i.deep_symbolize_keys! }
-  end
-end
-
-if RUBY_VERSION < "1.9.3"
-  class Module
-    private
-    # Suppresses no-method error for earlier rubies
-    def private_constant name
-      # do nothing
-    end
-  end
-end
 
 class Tengine::Mq::Suite
 

@@ -36,52 +36,6 @@ describe Enumerable do
       end
     end
   end
-
-  describe "#deep_freeze" do
-    subject { { "q" => { "w" => { "e" => { "r" => { "t" => { "y" => "u" } } } } } }.deep_freeze }
-    it "再帰的、破壊的なfreeze" do
-      subject["q"].frozen?.should be_true
-      subject["q"]["w"].frozen?.should be_true
-      subject["q"]["w"]["e"].frozen?.should be_true
-      subject["q"]["w"]["e"]["r"].frozen?.should be_true
-      subject["q"]["w"]["e"]["r"]["t"].frozen?.should be_true
-      subject["q"]["w"]["e"]["r"]["t"]["y"].frozen?.should be_true
-    end
-  end
-end
-
-describe Hash do
-  describe "#compact!" do
-    it "Array#compat!と同じ" do
-      h = { :foo => :bar, :baz => nil }
-      h.compact!
-      h.should include(:foo)
-      h.should_not include(:baz)
-    end
-  end
-
-  describe "#compact" do
-    it "非破壊的" do
-      h = { :foo => :bar, :baz => nil }
-      hh = h.compact
-      h.should include(:foo)
-      h.should include(:baz)
-      hh.should include(:foo)
-      hh.should_not include(:baz)
-    end
-  end
-
-  describe "#deep_symbolize_keys!" do
-    subject { { "q" => { "w" => { "e" => { "r" => { "t" => { "y" => "u" } } } } } }.tap{|i| i.deep_symbolize_keys! } }
-    it "再帰的、破壊的なsymbloze" do
-      subject[:q].should_not be_nil
-      subject[:q][:w].should_not be_nil
-      subject[:q][:w][:e].should_not be_nil
-      subject[:q][:w][:e][:r].should_not be_nil
-      subject[:q][:w][:e][:r][:t].should_not be_nil
-      subject[:q][:w][:e][:r][:t][:y].should_not be_nil
-    end
-  end
 end
 
 describe Tengine::Mq::Suite do
