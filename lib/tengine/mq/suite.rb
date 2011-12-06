@@ -234,7 +234,7 @@ class Tengine::Mq::Suite
     @mutex                    =  Mutex.new
     @condvar                  =  ConditionVariable.new
     @setting_up               =  Hash.new
-    @state                    =  :disconnected # see setup_handshake for possible values
+    @state                    =  :uninitialized # see setup_handshake for possible values
     @firing_queue             =  EM::Queue.new
     @publishing_events        =  Array.new
     @retrying_events          =  Hash.new
@@ -605,6 +605,9 @@ class Tengine::Mq::Suite
   def generate_connection cb
     cfg = cb.merge @config[:connection] do |k, v1, v2| v2 end
     AMQP.connect cfg do |conn|
+      synchronize do
+        @state = :connected
+      end
       yield conn
     end
   rescue AMQP::TCPConnectionFailed
@@ -776,7 +779,9 @@ class Tengine::Mq::Suite
     @setting_up[:handshake] = true
     # possible values of @state:
     #
-    # :disconnected  --- not connected yet or connection still lost
+    # :uninitialized --- not connected yet
+    # :disconnected  --- connection lost and still not recovered
+    # :connected     --- AMQP session established (no handshake yet)
     # :handshaking   --- handshake in progress, not established yet
     # :established   --- proper handshake was made
     # :unsupported   --- peer rejected handshake, but the connection itself is OK.
@@ -934,8 +939,14 @@ you to use a relatively recent version of RabbitMQ.                   [BEWARE!]
     end
 
     add_hook :'connection.on_tcp_connection_failure' do |setting|
-      # 最初の接続に失敗した場合。https://www.pivotaltracker.com/story/show/18317933
-      raise "It seems the MQ broker is missing (misconfiguration?)"
+      @mutex.synchronize do
+        case @state when :uninitialized then
+          # 最初の接続に失敗した場合。https://www.pivotaltracker.com/story/show/18317933
+          raise "It seems the MQ broker is missing (misconfiguration?)"
+        else
+          logger :error, "It seems the MQ broker is missing."
+        end
+      end
     end
 
     add_hook :'channel.on_connection_interruption' do |ch|
