@@ -335,6 +335,32 @@ class Tengine::Mq::Suite
     end
   end
 
+  # @yield                                  [cok]          Given  block is  called  after  it had  successfully  ubsubscribed from  the
+  #                                                        broker.
+  # @yieldparam [AMQP::Protocol::Basic::CancelOK]  cok     Message metadata.  *Note* can be nil when you set nowait: true.
+  # @param                                 [Hash]  cfg     Subscription options
+  # @option opts                        [Boolean] :nowait  With this flag on, like other  :nowait cases, the request is dealt silently.
+  #                                                        The block is called anyway though.
+  def unsubscribe cfg = Hash.new
+    raise ArgumentError, "no block given" unless block_given?
+    synchronize do
+      if ivar? :queue and @queue.default_consumer
+        cfg[:nowait] = cfg.fetch :nowait, false
+        if cfg[:nowait]
+          @queue.unsubscribe cfg
+          yield nil
+        else
+          @queue.unsubscribe cfg do |cok|
+            yield cok
+          end
+        end
+      else
+        logger :warn, "unsubscribe called but not subscribed"
+        yield nil
+      end
+    end
+  end
+
   # You don't have to understand it.  Use Tengine::Event::Sender.
   #
   # @param [Tengine::Event::Sender]  sender           Event sender
@@ -380,35 +406,45 @@ class Tengine::Mq::Suite
     end
 
     p1 = lambda do
-      if ivar? :connection
-        @connection.disconnect do
-          p0.call
-        end
-      else
+      @connection.disconnect do
         p0.call
       end
     end
 
     p2 = lambda do
+      @channel.close do
+        p1.call
+      end
+    end
+
+    p3 = lambda do
+      @queue.unsubscribe :nowait => false do
+        p2.call
+      end
+    end
+
+    p4 = lambda do
       synchronize do
         @condvar.wait @mutex until @pending_events.empty?
       end
     end
 
-    p3 = lambda do |a|
+    p5 = lambda do |a|
       synchronize do
-        if ivar? :channel
-          @channel.close do
-            p1.call
-          end
-        else
+        if ivar? :queue and @queue.default_consumer
+          p3.call
+        elsif ivar? :channel
+          p2.call
+        elsif ivar? :connection
           p1.call
+        else
+          p0.call
         end
       end
     end
 
     if EM.reactor_running?
-      EM.defer p2, p3
+      EM.defer p4, p5
     elsif block_given?
       yield
     end

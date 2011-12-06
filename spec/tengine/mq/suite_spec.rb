@@ -371,6 +371,82 @@ describe Tengine::Mq::Suite do
       end
     end
 
+    describe "#unsubscribe" do
+      subject { Tengine::Mq::Suite.new the_config }
+
+      context "no block" do
+        it { expect { subject.unsubscribe }.to raise_error(ArgumentError) }
+      end
+
+      context "no queue" do
+        it "runs the block" do
+          block_called = false
+          expect {
+            subject.unsubscribe {
+              block_called = true
+              subject.stop
+            }
+          }.to_not raise_error(RuntimeError)
+          block_called.should be_true
+        end
+      end
+
+      context "queue not subscribed" do
+        it "runs the block" do
+          block_called = false
+          expect {
+            EM.run do
+              subject.send :ensures, :queue do
+                subject.unsubscribe do
+                  block_called = true
+                  subject.stop
+                end
+              end
+            end
+          }.to_not raise_error(RuntimeError)
+          block_called.should be_true
+        end
+      end
+
+      context "subscribed" do
+        it "runs the block" do
+          block_called = false
+          expect {
+            EM.run do
+              subject.subscribe :nowait => false, :confirm => lambda {|x|
+                subject.unsubscribe {|y|
+                  block_called = true
+                  subject.stop
+                }
+              } do |hdr, bdy|
+                hdr.ack
+              end
+            end
+          }.to_not raise_error(RuntimeError)
+          block_called.should be_true
+        end
+      end
+
+      context "nowait:true" do
+        it "runs the block" do
+          block_called = false
+          expect {
+            EM.run do
+              subject.subscribe :nowait => false, :confirm => lambda {|x|
+                subject.unsubscribe({:nowait => true}) {|y|
+                  block_called = true
+                  subject.stop
+                }
+              } do |hdr, bdy|
+                hdr.ack
+              end
+            end
+          }.to_not raise_error(RuntimeError)
+          block_called.should be_true
+        end
+      end
+    end
+
     describe "#fire" do
       subject { Tengine::Mq::Suite.new the_config }
       let(:sender) { Tengine::Event::Sender.new subject }
@@ -830,6 +906,7 @@ describe Tengine::Mq::Suite do
       @the_exchange.stub(:on_connection_interruption)
       @the_queue.stub(:bind).with(@the_exchange, an_instance_of(Hash)).and_emyield
       @the_queue.stub(:subscribe).with(an_instance_of(Hash)) do |h, block|
+        h[:confirm].call mock(Mocker["confirm-ok"]) if h[:confirm] and not h[:nowait]
         cb = lambda do |ev|
           header = AMQP::Header.new @the_channel, nil, Hash.new
           header.stub(:ack)
@@ -843,6 +920,7 @@ describe Tengine::Mq::Suite do
       @the_queue.stub(:before_recovery)
       @the_queue.stub(:after_recovery)
       @the_queue.stub(:on_connection_interruption)
+      @the_queue.stub(:default_consumer)
     end
 
     let(:the_config) { Hash.new }
