@@ -293,6 +293,21 @@ class Tengine::Mq::Suite
       rescue NameError
         # RSpecはrequireされていないかも...
       end
+      begin
+        begin
+          channel.after_recovery do |*argv|
+            @mutex.synchronize do
+              @hooks[:'channel.after_recovery'].each do |proc|
+                proc.call(*argv)
+              end
+            end
+          end
+        rescue RSpec::Mocks::MockExpectationError
+          # @connectoinはmock objectかも...
+        end
+      rescue NameError
+        # RSpecはrequireされていないかも...
+      end
     end
   end
 
