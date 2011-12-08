@@ -12,32 +12,6 @@ else
   AMQP::Session.logger = Tengine.logger = Tengine::NullLogger.new
 end
 
-describe Enumerable do
-  describe "#each_next_tick" do
-    it "eachと同じ順にiterateする" do
-      str = ""
-      EM.run do
-        [1, 2, 3, 4].each_next_tick do |i|
-          str << i.to_s
-        end
-        EM.add_timer 0.1 do EM.stop end
-      end
-      str.should == "1234"
-    end
-
-    it "next_tickでやる" do
-      str = ""
-      EM.run do
-        [1, 2, 3, 4].each_next_tick do |i|
-          str << i.to_s
-        end
-        str.should be_empty
-        EM.add_timer 0.1 do EM.stop end
-      end
-    end
-  end
-end
-
 describe Tengine::Mq::Suite do
   shared_examples "Tengine::Mq::Suite" do
     describe "#initialize" do
@@ -403,15 +377,14 @@ describe Tengine::Mq::Suite do
 
     describe "#fire" do
       subject { Tengine::Mq::Suite.new the_config }
-      let(:sender) { Tengine::Event::Sender.new subject }
-      let(:expected_event) { Tengine::Event.new(:event_type_name => :foo, :key => "uniq_key") }
+      def sender; Tengine::Event::Sender.new subject end
+      def expected_event; Tengine::Event.new(:event_type_name => :foo, :key => "uniq_key") end
 
       context "without reactor" do
         it "raises" do
           block_called = false
           expect {
             ev = Tengine::Event.new :event_type_name => "foo"
-            sender = Tengine::Event::Sender.new subject
             subject.fire sender, ev, { :keep_connection => true }, nil
           }.to raise_error(RuntimeError)
           block_called.should be_false
@@ -421,15 +394,23 @@ describe Tengine::Mq::Suite do
       context "with reactor" do
         after do
           # キューにイベントがたまるのでてきとうに吸い出す
-          EM.run do
-            i = 0
-            subject.subscribe do |hdr, bdy|
-              hdr.ack
-              i += 1
-            end
-            EM.add_periodic_timer(0.1) do
-              subject.stop if i.zero?
+          if @port
+            EM.run do
               i = 0
+              subject.subscribe do |hdr, bdy|
+                hdr.ack
+                i += 1
+              end
+              @timer = EM.add_periodic_timer(0.1) do
+                if i.zero?
+                  EM.cancel_timer @timer
+                  subject.unsubscribe do
+                    subject.stop
+                  end
+                else
+                  i = 0
+                end
+              end
             end
           end
         end
@@ -492,7 +473,7 @@ describe Tengine::Mq::Suite do
             block_called = false
             EM.run do
               sender.fire "foo", :keep_connection => false
-              EM.add_timer(0.5) do
+              EM.add_timer(1) do
                 block_called = true
                 subject.stop
               end
@@ -541,8 +522,9 @@ describe Tengine::Mq::Suite do
             EM.run do
               subject.send :ensures, :exchange do |xchg|
                 # 正規のfireとリトライのfireなので、リトライ回数+1
+                x = sender
                 xchg.stub(:publish).with(expected_event.to_json, :content_type => "application/json", :persistent => true).exactly(3).times.and_raise(StandardError)
-                subject.fire sender, expected_event, {:keep_connection => false, :retry_interval => 1, :retry_count => 2}, nil
+                subject.fire x, expected_event, {:keep_connection => false, :retry_interval => 1, :retry_count => 2}, nil
                 subject.stop
               end
             end
@@ -635,7 +617,7 @@ describe Tengine::Mq::Suite do
             end
           end
           GC.start
-          subject.pending_events.size.should < n
+          subject.pending_events{true}.size.should < n
         end
       end
     end
@@ -647,15 +629,17 @@ describe Tengine::Mq::Suite do
 
       after do
         # キューにイベントがたまるのでてきとうに吸い出す
-        EM.run do
-          i = 0
-          subject.subscribe do |hdr, bdy|
-            hdr.ack
-            i += 1
-          end
-          EM.add_periodic_timer(0.1) do
-            subject.stop if i.zero?
+        if @port
+          EM.run do
             i = 0
+            subject.subscribe do |hdr, bdy|
+              hdr.ack
+              i += 1
+            end
+            EM.add_periodic_timer(0.1) do
+              subject.stop if i.zero?
+              i = 0
+            end
           end
         end
       end
@@ -687,55 +671,97 @@ describe Tengine::Mq::Suite do
         block_called.should be_true
       end
     end
+
+    describe "#initiate_termination" do
+      subject { Tengine::Mq::Suite.new the_config }
+      after do
+        # キューにイベントがたまるのでてきとうに吸い出す
+        if @port
+          EM.run do
+            i = 0
+            subject.subscribe do |hdr, bdy|
+              hdr.ack
+              i += 1
+            end
+            EM.add_periodic_timer(0.1) do
+              subject.stop if i.zero?
+              i = 0
+            end
+          end
+        end
+        finish
+      end
+
+      it "再接続しない" do
+        block_called = false
+        EM.run do
+          subject.add_hook("connection.after_recovery") { block_called = true }
+          subject.initiate_termination do
+            EM.defer(proc { finish; trigger@port },
+                     proc { subject.stop })
+          end
+        end
+        block_called.should_not be_true
+      end
+    end
   end
 
   context "実際にMQに接続する試験" do
-    before :all do
-      pending "these specs needs a ruby 1.9.2" if RUBY_VERSION < "1.9.2"
-
-      # 1. rabbitmqをさがす
-      rabbitmq = nil
+    let(:rabbitmq) do
+      ret = nil
       ENV["PATH"].split(/:/).find do |dir|
         Dir.glob("#{dir}/rabbitmq-server") do |path|
           if File.executable?(path)
-            rabbitmq = path
+            ret = path
             break
           end
         end
       end
 
-      pending "these specs needs a rabbitmq installed" unless rabbitmq
+      pending "these specs needs a rabbitmq installed" unless ret
+      ret
+    end
 
-      # 2. rabbitmqの起動
+    def trigger port = rand(32768)
       require 'tmpdir'
-      @port = nil
       @dir = Dir.mktmpdir
-
       # 指定したポートはもう使われているかもしれないので、その際は
       # rabbitmqが起動に失敗するので、何回かポートを変えて試す。
       n = 0
       begin
-        @port = rand(32768)
         envp = {
           "RABBITMQ_NODENAME"        => "rspec",
-          "RABBITMQ_NODE_PORT"       => @port.to_s,
+          "RABBITMQ_NODE_PORT"       => port.to_s,
           "RABBITMQ_NODE_IP_ADDRESS" => "auto",
           "RABBITMQ_MNESIA_BASE"     => @dir.to_s,
           "RABBITMQ_LOG_BASE"        => @dir.to_s,
         }
         @pid = Process.spawn(envp, rabbitmq, :chdir => @dir, :in => :close)
-        256.times do # まあこんくらい待てばいいでしょ
+        x = Time.now
+        while Time.now < x + 16.0 do # まあこんくらい待てばいいでしょ
           sleep 0.1
           Process.waitpid2(@pid, Process::WNOHANG)
           Process.kill 0, @pid
+          # netstat -an は Linux / BSD ともに有効
+          # どちらかに限ればもう少し効率的な探し方はある。たとえば Linux 限定でよければ netstat -lnt ...
+          y = `netstat -an | fgrep LISTEN | fgrep #{port}`
+          if y.lines.to_a.size > 1
+            @port = port
+            return
+          end
         end
+        pending "failed to invoke rabbitmq in 16 secs."
       rescue Errno::ECHILD, Errno::ESRCH
-        pending "10 attempts to invoke rabbitmq failed." if (n += 1) > 10
-        retry
+        if (n += 1) > 10
+          pending "10 attempts to invoke rabbitmq failed."
+        else
+          port = rand(32768)
+          retry
+        end
       end
     end
 
-    after :all do
+    def finish
       if @pid
         begin
           Process.kill "INT", @pid
@@ -746,6 +772,16 @@ describe Tengine::Mq::Suite do
           FileUtils.remove_entry_secure @dir, :force
         end
       end
+      @pid = nil
+    end
+
+    before :all do
+      pending "these specs needs a ruby 1.9.2" if RUBY_VERSION < "1.9.2"
+      trigger
+    end
+
+    after :all do
+      finish
     end
 
     let(:the_config) {
@@ -759,6 +795,11 @@ describe Tengine::Mq::Suite do
   end
 
   context "mock/stubによる試験" do
+    def trigger *;
+    end
+    def finish
+    end
+
     class Mocker
       class << self
         alias_method :[], :new
@@ -826,6 +867,7 @@ describe Tengine::Mq::Suite do
       AMQP::Channel.stub(:next_channel_id).and_return(@the_channel_id)
       AMQP::Channel.stub(:new).with(@the_connection, @the_channel_id, an_instance_of(Hash)).and_emyield(@the_channel).and_return(@the_channel)
       AMQP::Exchange.stub(:new).with(@the_channel, an_instance_of(Symbol), an_instance_of(String), an_instance_of(Hash)).and_emyield(@the_exchange).and_return(@the_exchange)
+      @the_connection.stub(:connected?).and_return(true)
       @the_connection.stub(:disconnect) do |block|
         EM.next_tick do
           @callbacks[@the_connection][:on_closed].yield @the_connection if @callbacks[@the_connection][:on_closed]
@@ -842,7 +884,7 @@ describe Tengine::Mq::Suite do
       @the_connection.stub(:on_tcp_connection_failure) do |block| @callbacks[@the_connection][:on_tcp_connection_failure] = block end
       @the_connection.stub(:on_tcp_connection_loss)
       @the_channel.stub(:queue).with(an_instance_of(String), an_instance_of(Hash)).and_emyield(@the_queue).and_return(@the_queue)
-      @the_channel.stub(:close).and_yield
+      @the_channel.stub(:close).and_emyield
       @the_channel.stub(:before_recovery)
       @the_channel.stub(:after_recovery)
       @the_channel.stub(:on_connection_interruption)

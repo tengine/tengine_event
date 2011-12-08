@@ -171,6 +171,7 @@ class Tengine::Mq::Suite
   #                                                     application exclusive consumer  is part of crashes or  loses network connection
   #                                                     to the broker, channel is closed and exclusive consumer is thus cancelled.
   def initialize cfg          =  Hash.new
+    @terminating              =  false
     @mutex                    =  Mutex.new
     @condvar                  =  ConditionVariable.new
     @setting_up               =  Hash.new
@@ -316,9 +317,14 @@ class Tengine::Mq::Suite
     cfg = @config[:sender].merge opts.compact
     e = PendingEvent.new 0, sender, event, cfg, 0, block
     synchronize do
-      @firing_queue.push e # serialize
       @pending_events[e] = true
-      trigger_firing_thread if @firing_queue.size <= 1 # first kick
+      case @state when :disconnected
+        # wait for next connection
+        @retrying_events[e] = [nil, Time.at(0)]
+      else
+        @firing_queue.push e # serialize
+        trigger_firing_thread if @firing_queue.size <= 1 # first kick
+      end
     end
   end
 
@@ -328,66 +334,97 @@ class Tengine::Mq::Suite
     # けで無駄に長いメソッドになっている。
 
     p0 = lambda do
-      synchronize do
-        @state = :disconnected
-        @setting_up.clear
-        @firing_queue = EM::Queue.new
-        @connection = nil
-        @channel = nil
-        @queue = nil
-        @exchange = nil
-        GC.start # 気休め
-        if block_given? then
-          yield
-        else
-          EM.stop
-        end
+      EM.cancel_timer @reconnection_timer if ivar? :reconnection_timer
+      @retrying_events.each_value do |(idx, *)|
+        EM.stop_timer idx if idx
+      end
+      @retrying_events.clear
+      stop_firing_queue
+
+      @state = :uninitialized # この後またEM.run{ .. }されるかも
+      @setting_up.clear
+      @firing_queue = EM::Queue.new
+      @connection = nil
+      @channel = nil
+      @queue = nil
+      @exchange = nil
+      @reconnection_timer = nil
+      GC.start # 気休め
+
+      logger :info, "OK, stopped.  Good bye."
+      if block_given? then
+        yield
+      else
+        EM.stop
       end
     end
 
     p1 = lambda do
-      @connection.disconnect do
+      if ivar? :connection
+        @connection.disconnect do
+          synchronize do
+            p0.call
+          end
+        end
+      else
         p0.call
       end
     end
 
     p2 = lambda do
-      @channel.close do
+      if ivar? :channel
+        @channel.close do
+          synchronize do
+            p1.call
+          end
+        end
+      else
         p1.call
       end
     end
 
     p3 = lambda do
-      @queue.unsubscribe :nowait => false do
+      if ivar? :queue and @queue.default_consumer
+        @queue.unsubscribe :nowait => false do
+          synchronize do
+            p2.call
+          end
+        end
+      else
         p2.call
       end
     end
 
     p4 = lambda do
       synchronize do
+        logger :info, "finishing up, now sending remaining events."
         @condvar.wait @mutex until @pending_events.empty?
       end
     end
 
     p5 = lambda do |a|
       synchronize do
-        if ivar? :queue and @queue.default_consumer
-          p3.call
-        elsif ivar? :channel
-          p2.call
-        elsif ivar? :connection
-          p1.call
-        else
-          p0.call
-        end
+        p3.call
       end
     end
 
-    if EM.reactor_running?
-      EM.defer p4, p5
-    elsif block_given?
-      yield
+    initiate_termination do
+      if EM.reactor_running?
+        EM.defer p4, p5
+      elsif block_given?
+        yield
+      end
     end
+  end
+
+  # Declares that the  application is now terminating  this MQ connection.  No reconnection  / resend attempts are made  any more.  The
+  # connection (if any) is  still open and you can push / pull  using it, but by calling this method you  hereby agree that no messages
+  # involving this suite are reliable any longer.
+  #
+  # Yields after the declaration.
+  def initiate_termination
+    @terminating = true # FIXME: should be mutex-protected
+    yield
   end
 
   def inspect
@@ -499,11 +536,6 @@ class Tengine::Mq::Suite
     instance_variable_defined?(vid) && instance_variable_get(vid)
   end
 
-  # misc.
-  def auto_reconnect_delay
-    @config[:connection][:auto_reconnect_delay]
-  end
-
   # misc also
   def rehash_them_all
     instance_variables.each do |i|
@@ -561,8 +593,8 @@ class Tengine::Mq::Suite
   # @yields [obj] yields generated object
   def ensures klass
     raise "eventmachine's reactor needed" unless EM.reactor_running?
-    # このメソッドはEM.deferでvidの初期化を待つ。EM.deferだから戻り値を使ってはいけない。引数のブロックは、vidが初期化されたことが確認
-    # された後にcallされる。
+    # このメソッドはEM.deferでklassの初期化を待つ。EM.deferだから戻り値を使ってはいけない。引数のブロックは、klassが初期化されたことが確
+    # 認された後にcallされる。
     p1 = lambda do
       synchronize do
         unless ivar? klass
@@ -595,7 +627,8 @@ class Tengine::Mq::Suite
   def generate_channel *;
     cfg = @config[:channel]
     ensures :connection do |conn|
-      AMQP::Channel.new conn, AMQP::Channel.next_channel_id, cfg do |ch|
+      id = AMQP::Channel.next_channel_id
+      AMQP::Channel.new conn, id, cfg do |ch|
         yield ch
       end
     end
@@ -714,7 +747,7 @@ class Tengine::Mq::Suite
       # 2段階のEM.deferを行っている。まず初段で@channelの初期化をキックして、channel -> connectionと依存関係をたぐってコネクションを確立
       # する。channelを成立させるところまでの待ち合わせが第一段。次に、生成した@channelを用いてpublisher confirmationのハンドシェイクを
       # キックして、これが確立するのを待つのが第二段。
-      logger :info, "waiting for MQ to be set up..."
+      logger :info, "waiting for MQ to be set up (now %s)...", @state
 
       d4 = lambda do |a|
              yield
@@ -723,7 +756,8 @@ class Tengine::Mq::Suite
              synchronize do
                unless ensures_handshake_internal
                  setups_handshake unless @setting_up[:handshake]
-                 @condvar.wait @mutex until ensures_handshake_internal
+                 # @condvar.wait @mutex until ensures_handshake_internal
+                 @mutex.sleep 0.1 until ensures_handshake_internal
                end
              end
            end
@@ -763,27 +797,23 @@ class Tengine::Mq::Suite
     # :unsupported   --- peer rejected handshake, but the connection itself is OK.
     cap = @connection.server_capabilities
     if cap and cap["publisher_confirms"] then
-      if @channel.uses_publisher_confirmations?
-        # already. THIS IS POSSIBLE when a channel reconnected.
-      else
-        @state = :handshaking
-        @channel.confirm_select do
-          # this is in next EM loop...
-          synchronize do
-            reinvoke_retry_timers unless @retrying_events.empty?
-            @channel.on_ack do |ack|
-              # this is in another EM loop...
-              consume_basic_ack ack 
-            end
-            @channel.on_nack do |ack|
-              # this is in yet another EM loop...
-              consume_basic_nack ack 
-            end
-            @tag = 0
-            @state = :established
-            @setting_up.delete :handshake
-            @condvar.broadcast
+      @state = :handshaking
+      @channel.confirm_select do
+        # this is in next EM loop...
+        synchronize do
+          reinvoke_retry_timers unless @retrying_events.empty?
+          @channel.on_ack do |ack|
+            # this is in another EM loop...
+            consume_basic_ack ack 
           end
+          @channel.on_nack do |ack|
+            # this is in yet another EM loop...
+            consume_basic_nack ack 
+          end
+          @tag = 0
+          @state = :established
+          @setting_up.delete :handshake
+          @condvar.broadcast
         end
       end
     else
@@ -902,6 +932,7 @@ you to use a relatively recent version of RabbitMQ.                   [BEWARE!]
         end
       end
       @retrying_events.clear
+      trigger_firing_thread
     end
   end
 
@@ -910,8 +941,24 @@ you to use a relatively recent version of RabbitMQ.                   [BEWARE!]
       logger :debug, "AMQP event callback: %s.%s", klass, mid#, argv
     end
 
+    add_hook :'connection.before_recovery' do |conn|
+      EM.cancel_timer @reconnection_timer if ivar? :reconnection_timer
+    end
+
     add_hook :'connection.on_tcp_connection_loss' do |conn|
-      conn.reconnect false, auto_reconnect_delay.to_i if auto_reconnect_delay
+      # Wow! AMQP::Session#reconnect is brain-damaged that it cannot be cancelled!
+      # conn.reconnect false, auto_reconnect_delay.to_i if auto_reconnect_delay and not @terminating
+
+      ard  = @config[:connection][:auto_reconnect_delay]
+      host = @config[:connection][:host]
+      port = @config[:connection][:port]
+      if ard and not @terminating and conn.closed?
+        conn.instance_eval { @reconnecting = true; reset }
+        @reconnection_timer = EM.add_timer ard do
+          EM.reconnect host, port, conn
+          @reconnection_timer = nil
+        end
+      end
     end
 
     add_hook :'connection.on_tcp_connection_failure' do |setting|
@@ -930,12 +977,29 @@ you to use a relatively recent version of RabbitMQ.                   [BEWARE!]
     end
 
     add_hook :'channel.after_recovery' do |ch|
-      ch.prefetch @config[:channel][:prefetch]
-      reinvoke_retry_timers
+      ch.prefetch @config[:channel][:prefetch] do
+        @setting_up.delete :handshake # re-initialize
+        reinvoke_retry_timers
+        @condvar.broadcast
+      end
+    end
+
+    add_hook :'connection.after_recovery' do |conn|
+      synchronize do
+        @state = :connected
+      end
     end
   end
 
   #######
+
+  def stop_firing_queue
+    # beautiful...
+    @firing_queue.instance_eval do
+      @items.clear
+      @popq.clear
+    end
+  end
 
   def trigger_firing_thread
     # inside mutex
@@ -944,8 +1008,14 @@ you to use a relatively recent version of RabbitMQ.                   [BEWARE!]
       ensures :exchange do
         synchronize do
           cb = lambda do |ev|
-            fire_internal ev
-            @firing_queue.pop(&cb)
+            case @state when :unsupported, :established
+              fire_internal ev
+              @firing_queue.pop(&cb)
+            else
+              # disconnectedとか。
+              # 無視?
+              @firing_queue.push ev
+            end
           end
           @firing_queue.pop(&cb)
         end
@@ -967,7 +1037,7 @@ you to use a relatively recent version of RabbitMQ.                   [BEWARE!]
   end
 
   def publish_failed ev, ex
-    if ev.retry < ev.opts[:retry_count]
+    if resendable_p ev
       idx = EM.add_timer ev.opts[:retry_interval] do
         synchronize do
           ev.retry += 1
@@ -982,8 +1052,15 @@ you to use a relatively recent version of RabbitMQ.                   [BEWARE!]
       @pending_events.delete ev
       @publishing_events.reject! {|i| i == ev }
       @condvar.broadcast
+      logger :fatal, "SEND FAILED: EVENT LOST %p", ev.event
       stop unless ev.opts[:keep_connection] # 送信失敗かつコネクション維持しないということはここで停止すべき
     end
+  end
+
+  def resendable_p ev
+    return false if @terminating and not @connection
+    return false if @terminating and not @connection.connected?
+    return ev.retry < ev.opts[:retry_count]
   end
 
   def published ev
@@ -1007,8 +1084,6 @@ you to use a relatively recent version of RabbitMQ.                   [BEWARE!]
       ev.tag = @tag
       rehash_them_all
       @publishing_events.push ev
-    else
-      raise "timing bug.  Contact @shyouhei with this info: #{@state}"
     end
   end
 end
