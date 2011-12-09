@@ -12,6 +12,8 @@ else
   AMQP::Session.logger = Tengine.logger = Tengine::NullLogger.new
 end
 
+require 'amq/client/callbacks'
+
 describe Tengine::Mq::Suite do
   shared_examples "Tengine::Mq::Suite" do
     describe "#initialize" do
@@ -689,7 +691,6 @@ describe Tengine::Mq::Suite do
             end
           end
         end
-        finish
       end
 
       it "再接続しない" do
@@ -702,6 +703,52 @@ describe Tengine::Mq::Suite do
           end
         end
         block_called.should_not be_true
+      end
+    end
+
+    describe "#callback_entity" do
+      subject { Tengine::Mq::Suite.new the_config }
+      it "registers callbacks" do
+        EM.run do
+          subject.send :ensures, :queue do
+            { :queue => [
+                :before_recovery,
+                :after_recovery,
+                :after_connection_interruption,
+              ],
+              :exchange => [
+               :before_recovery,
+               :after_recovery,
+               :after_connection_interruption,
+              ],
+              :channel => [
+               :before_recovery,
+               :after_recovery,
+               :after_connection_interruption,
+               :error,
+              ],
+              :connection => [
+                :before_recovery,
+                :after_recovery,
+                :after_connection_interruption,
+#                 :on_closed,
+#                 :on_possible_authentication_failure,
+#                 :on_tcp_connection_failure,
+#                 :on_tcp_connection_loss,
+              ]
+            }.each_pair do |klass, mids|
+              obj = subject.send klass
+              mids.each do |mid|
+                case obj when AMQ::Client::Callbacks
+                  obj.should be_has_callback(mid) # 英語おかしいがしょうがない
+                else
+                  # mockかも
+                end
+              end
+            end
+            subject.stop
+          end
+        end
       end
     end
   end
@@ -723,8 +770,9 @@ describe Tengine::Mq::Suite do
     end
 
     def trigger port = rand(32768)
+      raise "WRONG" if $_pid
       require 'tmpdir'
-      @dir = Dir.mktmpdir
+      $_dir = Dir.mktmpdir
       # 指定したポートはもう使われているかもしれないので、その際は
       # rabbitmqが起動に失敗するので、何回かポートを変えて試す。
       n = 0
@@ -733,15 +781,15 @@ describe Tengine::Mq::Suite do
           "RABBITMQ_NODENAME"        => "rspec",
           "RABBITMQ_NODE_PORT"       => port.to_s,
           "RABBITMQ_NODE_IP_ADDRESS" => "auto",
-          "RABBITMQ_MNESIA_BASE"     => @dir.to_s,
-          "RABBITMQ_LOG_BASE"        => @dir.to_s,
+          "RABBITMQ_MNESIA_BASE"     => $_dir.to_s,
+          "RABBITMQ_LOG_BASE"        => $_dir.to_s,
         }
-        @pid = Process.spawn(envp, rabbitmq, :chdir => @dir, :in => :close)
+        $_pid = Process.spawn(envp, rabbitmq, :chdir => $_dir, :in => :close)
         x = Time.now
         while Time.now < x + 16.0 do # まあこんくらい待てばいいでしょ
           sleep 0.1
-          Process.waitpid2(@pid, Process::WNOHANG)
-          Process.kill 0, @pid
+          Process.waitpid2($_pid, Process::WNOHANG)
+          Process.kill 0, $_pid
           # netstat -an は Linux / BSD ともに有効
           # どちらかに限ればもう少し効率的な探し方はある。たとえば Linux 限定でよければ netstat -lnt ...
           y = `netstat -an | fgrep LISTEN | fgrep #{port}`
@@ -762,17 +810,17 @@ describe Tengine::Mq::Suite do
     end
 
     def finish
-      if @pid
+      if $_pid
         begin
-          Process.kill "INT", @pid
-          Process.waitpid @pid
+          Process.kill "INT", $_pid
+          Process.waitpid $_pid
         rescue Errno::ECHILD, Errno::ESRCH
         ensure
           require 'fileutils'
-          FileUtils.remove_entry_secure @dir, :force
+          FileUtils.remove_entry_secure $_dir, :force
         end
       end
-      @pid = nil
+      $_pid = nil
     end
 
     before :all do
