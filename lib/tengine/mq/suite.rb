@@ -684,7 +684,7 @@ class Tengine::Mq::Suite
   end
 
   def hooks_connection
-    hooks_basic + %w[
+    hooks_channel + %w[
       on_closed
       on_possible_authentication_failure
       on_tcp_connection_failure
