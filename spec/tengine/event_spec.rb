@@ -273,22 +273,20 @@ describe "Tengine::Event" do
       @mock_connection = mock(:connection)
       @mock_channel = mock(:channel)
       @mock_exchange = mock(:exchange)
-      AMQP.should_receive(:connect).with(an_instance_of(Hash)).and_return(@mock_connection)
-      @mock_connection.should_receive(:on_tcp_connection_loss)
-      @mock_connection.should_receive(:after_recovery)
-      @mock_connection.should_receive(:on_closed)
+      AMQP.should_receive(:connect).with(an_instance_of(Hash)).and_yield(@mock_connection).and_return(@mock_connection)
       @mock_connection.stub(:connected?).and_return(true)
       @mock_connection.stub(:disconnect).and_yield
       @mock_connection.stub(:server_capabilities).and_return(nil)
-      AMQP::Channel.should_receive(:new).with(@mock_connection, :prefetch => 1, :auto_recovery => true).and_return(@mock_channel)
+      AMQP::Channel.should_receive(:new).with(@mock_connection, an_instance_of(Fixnum), an_instance_of(Hash)).and_yield(@mock_channel).and_return(@mock_channel)
       @mock_channel.stub(:publisher_index).and_return(nil)
-      AMQP::Exchange.should_receive(:new).with(@mock_channel, "direct", "exchange1",
-        :passive=>false, :durable=>true, :auto_delete=>false, :internal=>false, :nowait=>true).and_return(@mock_exchange)
+      AMQP::Exchange.should_receive(:new).with(@mock_channel, :direct, "exchange1",
+        :passive=>false, :durable=>true, :auto_delete=>false, :internal=>false, :nowait=>false).and_yield(@mock_exchange).and_return(@mock_exchange)
+      @mock_channel.stub(:close)
     end
 
     it "JSON形式にserializeしてexchangeにpublishする" do
       expected_event = Tengine::Event.new(:event_type_name => :foo, :key => "uniq_key")
-      @mock_exchange.should_receive(:publish).with(expected_event.to_json, "persistent" => true)
+      @mock_exchange.should_receive(:publish).with(expected_event.to_json, :persistent => true, :content_type => "application/json")
       EM.run do
         Tengine::Event.fire(:foo, :key => "uniq_key")
         EM.add_timer(0.1) do

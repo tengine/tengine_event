@@ -8,6 +8,7 @@ source "http://rubygems.org"
 #   gem "activesupport", ">= 2.3.5"
 
 gem "activesupport", ">= 3.0.0"
+gem "tengine_support", ">= 0.3.23.eventTNG"
 
 gem "uuid", "~> 2.3.4"
 
