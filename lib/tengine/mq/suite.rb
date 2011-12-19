@@ -489,16 +489,7 @@ class Tengine::Mq::Suite
   def logger lv, fmt, *argv
     msg = sprintf fmt, *argv
     if defined? Tengine.logger
-      require 'logger'
-      si = {
-        :debug => Logger::DEBUG,
-        :info => Logger::INFO,
-        :warn => Logger::WARN,
-        :error => Logger::ERROR,
-        :fatal => Logger::FATAL,
-        :unknown => Logger::UNKNOWN,
-      }.fetch lv, lv
-      Tengine.logger.log si, msg
+      Tengine.logger.send lv, msg
     else
       STDERR.puts msg
     end
