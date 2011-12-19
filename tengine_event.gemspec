@@ -5,11 +5,11 @@
 
 Gem::Specification.new do |s|
   s.name = "tengine_event"
-  s.version = "0.4.0"
+  s.version = "0.4.1"
 
   s.required_rubygems_version = Gem::Requirement.new(">= 0") if s.respond_to? :required_rubygems_version=
   s.authors = ["saishu", "w-irie", "taigou", "totty", "hiroshinakao", "g-morita", "guemon", "aoetk", "hattori-at-nt", "t-yamada", "y-karashima", "akm"]
-  s.date = "2011-12-14"
+  s.date = "2011-12-19"
   s.description = "Tengine Event API to access the queue"
   s.email = "tengine@nautilus-technologies.com"
   s.executables = ["tengine_fire"]
@@ -47,7 +47,7 @@ Gem::Specification.new do |s|
   s.homepage = "https://github.com/tengine/tengine_event"
   s.licenses = ["MPL/LGPL"]
   s.require_paths = ["lib"]
-  s.rubygems_version = "1.8.11"
+  s.rubygems_version = "1.8.10"
   s.summary = "Tengine Event API to access the queue"
 
   if s.respond_to? :specification_version then
@@ -55,7 +55,7 @@ Gem::Specification.new do |s|
 
     if Gem::Version.new(Gem::VERSION) >= Gem::Version.new('1.2.0') then
       s.add_runtime_dependency(%q<activesupport>, [">= 3.0.0"])
-      s.add_runtime_dependency(%q<tengine_support>, [">= 0.3.23"])
+      s.add_runtime_dependency(%q<tengine_support>, [">= 0.3.24"])
       s.add_runtime_dependency(%q<uuid>, ["~> 2.3.4"])
       s.add_runtime_dependency(%q<amqp>, ["~> 0.8.0"])
       s.add_development_dependency(%q<rspec>, ["~> 2.6.0"])
@@ -67,7 +67,7 @@ Gem::Specification.new do |s|
       s.add_development_dependency(%q<ci_reporter>, ["~> 1.6.5"])
     else
       s.add_dependency(%q<activesupport>, [">= 3.0.0"])
-      s.add_dependency(%q<tengine_support>, [">= 0.3.23"])
+      s.add_dependency(%q<tengine_support>, [">= 0.3.24"])
       s.add_dependency(%q<uuid>, ["~> 2.3.4"])
       s.add_dependency(%q<amqp>, ["~> 0.8.0"])
       s.add_dependency(%q<rspec>, ["~> 2.6.0"])
@@ -80,7 +80,7 @@ Gem::Specification.new do |s|
     end
   else
     s.add_dependency(%q<activesupport>, [">= 3.0.0"])
-    s.add_dependency(%q<tengine_support>, [">= 0.3.23"])
+    s.add_dependency(%q<tengine_support>, [">= 0.3.24"])
     s.add_dependency(%q<uuid>, ["~> 2.3.4"])
     s.add_dependency(%q<amqp>, ["~> 0.8.0"])
     s.add_dependency(%q<rspec>, ["~> 2.6.0"])

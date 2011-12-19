@@ -58,6 +58,6 @@ DEPENDENCIES
   jeweler (~> 1.6.4)
   rspec (~> 2.6.0)
   simplecov (~> 0.5.3)
-  tengine_support (>= 0.3.23)
+  tengine_support (>= 0.3.24)
   uuid (~> 2.3.4)
   yard (~> 0.7.2)
