@@ -1,270 +1,123 @@
 # -*- coding: utf-8 -*-
-require File.expand_path(File.dirname(__FILE__) + '/../../spec_helper')
-require 'amqp'
+require File.expand_path('../../../spec_helper', __FILE__)
 
+# fire の機能面(何を送信するか等)に関してはmq/suiteに記載済み
 describe "Tengine::Event::Sender" do
-  describe :initialize do
-    before do
-      # connection
-      @mock_connection = mock(:connection)
-      AMQP.should_receive(:connect).with(an_instance_of(Hash)).and_return(@mock_connection)
-      @mock_connection.should_receive(:on_tcp_connection_loss)
-      @mock_connection.should_receive(:after_recovery)
-      @mock_connection.should_receive(:on_closed)
-    end
-
-    context "mq_suite without config" do
+  describe "#initialize" do
+    context "no args" do
       subject{ Tengine::Event::Sender.new.mq_suite }
-      it{ subject.config[:sender].should_not be_empty }
-      it{ subject.config[:connection].should_not be_empty }
-      it{ subject.config[:exchange].should_not be_empty }
-      it{ subject.config[:exchange][:name].should == "tengine_event_exchange" }
-      it{ subject.config[:exchange][:publish].should == {:persistent => true} }
-      it{ subject.config[:queue].should_not be_empty }
-      it{ subject.config.keys.length.should == 4 }
+      it { should_not be_nil }
+      it { should be_kind_of Tengine::Mq::Suite }
     end
 
-    context "mq_suite with config" do
-      subject{ Tengine::Event::Sender.new(:exchange => {:name => "another_exhange"}).mq_suite }
-      it{ subject.config[:exchange][:name].should == "another_exhange" }
+    context "with options" do
+      subject{ Tengine::Event::Sender.new(:exchange => {:name => "another_exhange"}).mq_suite.config[:exchange][:name] }
+      it { should == "another_exhange" }
     end
 
     context "with mq_suite" do
       before{ @mq_suite = Tengine::Mq::Suite.new }
-      it{ Tengine::Event::Sender.new( @mq_suite ) }
+      subject{ Tengine::Event::Sender.new(@mq_suite).mq_suite }
+      it { should == @mq_suite }
     end
 
     context "with mq_suite and options" do
-      before{ @mq_suite = Tengine::Mq::Suite.new }
-      it{ Tengine::Event::Sender.new( @mq_suite, :logger => mock(:logger) ) }
+      before do
+        @mq_suite = Tengine::Mq::Suite.new
+        @logger = mock(:logger)
+      end
+      subject { Tengine::Event::Sender.new(@mq_suite, :logger => @logger) }
+      its (:mq_suite) { should == @mq_suite }
+      its (:logger) { should == @logger }
     end
-
   end
 
-  describe :fire do
+  describe "#stop" do
+    before { @mq_suite = Tengine::Mq::Suite.new }
+    subject { Tengine::Event::Sender.new(@mq_suite) }
+
+    it "stops suite" do
+      @mq_suite.should_receive :stop
+      subject.stop
+    end
+
+    it "calls the given block (if any) afterwards" do
+      @mq_suite.should_receive(:stop).and_yield
+      block_called = false
+      subject.stop { block_called = true }
+      block_called.should == true
+    end
+  end
+
+  describe "#pending_events" do
     before do
-      @mock_connection = mock(:connection)
-      @mock_channel = mock(:channel)
-      @mock_exchange = mock(:exchange)
+      @mq_suite = Tengine::Mq::Suite.new
+      @event = Tengine::Event.new
+      @mq_suite.stub(:pending_events_for).with(an_instance_of(Tengine::Event::Sender)).and_return([@event])
+    end
+    subject { Tengine::Event::Sender.new(@mq_suite).pending_events }
 
-      # connection
-      AMQP.should_receive(:connect).with(an_instance_of(Hash)).and_return(@mock_connection)
-      @mock_connection.should_receive(:on_tcp_connection_loss)
-      @mock_connection.should_receive(:after_recovery)
-      @mock_connection.should_receive(:on_closed)
-      @mock_connection.stub(:connected?).and_return(true)
-      @mock_connection.stub(:disconnect).and_yield
-      @mock_connection.stub(:server_capabilities).and_return(nil)
-      # channel
-      AMQP::Channel.should_receive(:new).with(@mock_connection, :prefetch => 1, :auto_recovery => true).and_return(@mock_channel)
-      @mock_channel.stub(:publisher_index).and_return(nil)
-      # exchange
-      AMQP::Exchange.should_receive(:new).with(@mock_channel, "direct", "exchange1",
-        :passive=>false, :durable=>true, :auto_delete=>false, :internal=>false, :nowait=>true).and_return(@mock_exchange)
+    it { should be_kind_of Array }
+    it { should have(1).events }
+    it { should include(@event) }
+  end
+
+  describe "#wait_for_connection" do
+    it "does nothing" do
+      expect {
+        Tengine::Event::Sender.new.wait_for_connection {  }
+      }.to_not raise_error
+    end
+  end
+
+  describe "#fire" do
+    before do
+      @event = Tengine::Event.new
+      @mq_suite = Tengine::Mq::Suite.new
+      @mq_suite.stub(:fire).
+        with(an_instance_of(Tengine::Event::Sender),
+             an_instance_of(Tengine::Event),
+             an_instance_of(Hash),
+             an_instance_of(Proc)) {
+        |q, w, e, r|
+        r.yield
+      }
+      @mq_suite.stub(:fire).
+        with(an_instance_of(Tengine::Event::Sender),
+             an_instance_of(Tengine::Event),
+             an_instance_of(Hash),
+             an_instance_of(NilClass))
     end
 
-    context "正常系" do
-      before do
-        @sender = Tengine::Event::Sender.new(:exchange => {:name => "exchange1"})
-        @sender.mq_suite.stub(:ensure_publisher_confirmation).and_yield
-      end
-
-      it "JSON形式にserializeしてexchangeにpublishする" do
-        occurred_at = Time.now
-        expected_event = Tengine::Event.new(:event_type_name => :foo, :key => "uniq_key", :occurred_at => occurred_at)
-        @mock_exchange.should_receive(:publish).with(expected_event.to_json, :persistent => true)
-        EM.run { @sender.fire(:foo, :key => "uniq_key", :occurred_at => occurred_at) }
-      end
-
-      it "Tengine::Eventオブジェクトを直接指定することも可能" do
-        expected_event = Tengine::Event.new(:event_type_name => :foo, :key => "uniq_key")
-        @mock_exchange.should_receive(:publish).with(expected_event.to_json, :persistent => true)
-        EM.run { @sender.fire(expected_event) }
-      end
-
-      context "publish後に特定の処理を行う" do
-        it "カスタム処理" do
-          expected_event = Tengine::Event.new(:event_type_name => :foo, :key => "uniq_key")
-          @mock_exchange.should_receive(:publish).with(expected_event.to_json, :persistent => true)
-          block_called = false
-          EM.run {
-            @sender.fire(expected_event){ block_called = true }
-          }
-          block_called.should == true
-        end
-
-        it "自動で切断せずに、接続を維持する" do
-          # mock connection ではテストが難しい
-          expected_event = Tengine::Event.new(:event_type_name => :foo, :key => "uniq_key")
-          @mock_exchange.should_receive(:publish).with(expected_event.to_json, :persistent => true)
-          block_called = false
-          EM.run {
-            @sender.default_keep_connection = true
-            @sender.fire(expected_event){ block_called = true }
-            EM.add_timer(1) {
-              @sender.mq_suite.connection.disconnect { EM.stop }
-            }
-          }
-          block_called.should == true
-        end
-      end
+    context "mandatory one arg" do
+      it { expect { Tengine::Event::Sender.new(@mq_suite).fire }.to raise_exception(ArgumentError) }
     end
 
-    context "AMQP::TCPConnectionFailed 以外のエラー" do
-      before do
-        # テスト実行時に1秒×30回、掛かるのは困るので、default値を変更しています。
-        @sender = Tengine::Event::Sender.new(:exchange => {:name => "exchange1"}, :sender => {:retry_interval => 0})
-      end
-      it "メッセージ送信ができなくてpublishに渡したブロックが呼び出されず、インターバルが過ぎて、EM.add_timeに渡したブロックが呼び出された場合" do
-        expected_event = Tengine::Event.new(:event_type_name => :foo, :key => "uniq_key")
-        @mock_exchange.should_receive(:publish).with(expected_event.to_json, :persistent => true).exactly(31).times.and_raise(StandardError)
-        EM.stub(:add_timer).with(0).exactly(31).times.and_yield
-        EM.stub(:add_timer).with(0, an_instance_of(Proc)) {|k, v| v.call }
+    context "one, string arg" do
+      subject { Tengine::Event::Sender.new(@mq_suite).fire("foo") }
+      it { should be_kind_of(Tengine::Event) }
+      its (:event_type_name) { should == "foo" }
+    end
+
+    context "one, event arg" do
+      subject { Tengine::Event::Sender.new(@mq_suite).fire(@event) }
+      it { should be_kind_of(Tengine::Event) }
+      it { should == @event }
+    end
+
+    context "event arg + option" do
+      subject { Tengine::Event::Sender.new(@mq_suite).fire(@event, :keep_connection => true) }
+      it { should == @event }
+    end
+
+    context "block argument" do
+      before { @event = Tengine::Event.new }
+      it "is called" do
         block_called = false
-        EM.run {
-          @sender.fire(expected_event){ block_called = true }
-          @sender.stop
-        }
-        block_called.should == false
-      end
-
-      it "エラーが発生しても設定のリトライが行われる" do
-        expected_event = Tengine::Event.new(:event_type_name => :foo, :key => "uniq_key")
-        EM.run {
-          # 正規のfireとリトライのfireなので、リトライ回数+1
-          @mock_exchange.should_receive(:publish).with(expected_event.to_json, {:persistent=>true}).exactly(31).times.and_raise('error')
-          @sender.fire(expected_event)
-          @sender.stop
-        }
-      end
-
-      it "エラーが発生してもオプションで指定したリトライ回数分のリトライが行われる" do
-        expected_event = Tengine::Event.new(:event_type_name => :foo, :key => "uniq_key")
-        EM.run {
-          # 正規のfireとリトライのfireなので、リトライ回数+1
-          @mock_exchange.should_receive(:publish).with(expected_event.to_json, {:persistent=>true}).exactly(2).times.and_raise('error')
-          @sender.fire(expected_event, :retry_count => 1)
-          @sender.stop
-        }
-      end
-
-      it "エラーが発生してもオプションで指定したリトライ間隔でリトライが行われる" do
-        expected_event = Tengine::Event.new(:event_type_name => :foo, :key => "uniq_key")
-        EM.run {
-          # 正規のfireとリトライのfireなので、リトライ回数+1
-          @mock_exchange.should_receive(:publish).with(expected_event.to_json, {:persistent=>true}).exactly(4).times.and_raise('error')
-          @sender.fire(expected_event, :retry_count => 3, :retry_interval => 0)
-          @sender.stop
-        }
-      end
-
-      it "ちょうどretry_count回めのリトライして成功の場合は例外にならない" do
-        expected_event = Tengine::Event.new(:event_type_name => :foo, :key => "uniq_key")
-        x = false
-        @mock_exchange.stub(:publish).with(expected_event.to_json, {:persistent=>true}) do
-          if x = !x
-            raise "foo"
-          else
-            next "foo"
-          end
+        Tengine::Event::Sender.new(@mq_suite).fire(@event) do
+          block_called = true
         end
-        block_called = false
-        EM.run {
-          @sender.fire(expected_event, :retry_count => 1) { block_called = true }
-          @sender.stop
-        }
-        block_called.should be_true
-      end
-    end
-
-    context "入り乱れたfireにおけるretryの回数" do
-      subject { Tengine::Event::Sender.new(:exchange => {:name => "exchange1"}, :sender => {:retry_interval => 0}) }
-      it "https://www.pivotaltracker.com/story/show/20236589" do
-        n1 = 0
-        n2 = 0
-        ev1 = Tengine::Event.new(:event_type_name => :foo, :key => "uniq_key")
-        ev2 = Tengine::Event.new(:event_type_name => :foo, :key => "another_uniq_key")
-        @mock_exchange.stub(:publish).with(ev1.to_json, {:persistent=>true}) do
-          n1 += 1
-          raise "ev1"
-        end
-        @mock_exchange.stub(:publish).with(ev2.to_json, {:persistent=>true}) do
-          n2 += 1
-          raise "ev2"
-        end
-        EM.run do
-          subject.fire(ev1, :keep_connection => true)
-          subject.fire(ev2, :keep_connection => true)
-          subject.stop
-        end
-        if n1 == 31
-          n2.should <= 31
-          n2.should >= 2
-        elsif n2 == 31
-          n1.should <= 31
-          n1.should >= 2
-        else
-          raise "neither n1(#{n1}) nor n2(#{n2})"
-        end
-      end
-
-      it "無限にメモリを消費しない" do
-        n = 256 # 1024 # 4096
-        @mock_exchange.stub(:publish).with(an_instance_of(String), {:persistent=>true}).and_raise('error')
-        EM.run do
-          n.times do
-            EM.next_tick do
-              ev = Tengine::Event.new(:event_type_name => :foo, :key => "uniq_key")
-              subject.fire(ev, :keep_connection => true, :retry_cont => 3)
-            end
-          end
-          EM.next_tick do
-            subject.stop
-          end
-        end
-        GC.start
-        subject.pending_events.size.should < n
-      end
-    end
-
-    context "複数のEM event loopにまたがったfire" do
-      subject { Tengine::Event::Sender.new(:exchange => {:name => "exchange1"}, :sender => {:retry_interval => 0}) }
-      it "https://www.pivotaltracker.com/story/show/21252625" do
-        @mock_exchange.stub(:publish).with(an_instance_of(String), {:persistent=>true})
-        EM.run do subject.fire("foo") end
-        EM.run do subject.fire("foo") end
-        # ここまでくればOK
-      end
-    end
-
-    describe :stop do
-      subject { Tengine::Event::Sender.new(:exchange => {:name => "exchange1"}) }
-
-      it "EMのイベントループを抜ける" do
-        @mock_exchange.stub(:publish).with(an_instance_of(String), an_instance_of(Hash))
-        EM.run do
-          subject.fire("something", :retry_count => 0)
-          subject.stop
-        end
-        # ここに到達すればOK
-      end
-
-      it "ペンディングのイベントが送信されるまではEMのイベントループにとどまる" do
-        event = Tengine::Event.new(:event_type_name => :foo, :key => "uniq_key")
-        x = false
-        @mock_exchange.stub(:publish).with(event.to_json, :persistent=>true) do
-          if x = !x
-            raise "foo"
-          else
-            next "foo"
-          end
-        end
-        block_called = false
-        EM.run {
-          subject.fire(event, :retry_count => 1) { block_called = true }
-          subject.stop
-        }
-        block_called.should be_true
+        block_called.should == true
       end
     end
   end
