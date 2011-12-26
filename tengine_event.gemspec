@@ -5,11 +5,11 @@
 
 Gem::Specification.new do |s|
   s.name = "tengine_event"
-  s.version = "0.4.1"
+  s.version = "0.4.2"
 
   s.required_rubygems_version = Gem::Requirement.new(">= 0") if s.respond_to? :required_rubygems_version=
   s.authors = ["saishu", "w-irie", "taigou", "totty", "hiroshinakao", "g-morita", "guemon", "aoetk", "hattori-at-nt", "t-yamada", "y-karashima", "akm"]
-  s.date = "2011-12-19"
+  s.date = "2011-12-26"
   s.description = "Tengine Event API to access the queue"
   s.email = "tengine@nautilus-technologies.com"
   s.executables = ["tengine_fire"]
@@ -24,6 +24,7 @@ Gem::Specification.new do |s|
     "README.rdoc",
     "Rakefile",
     "VERSION",
+    "bin/tengine_event_sucks",
     "bin/tengine_fire",
     "lib/tengine/event.rb",
     "lib/tengine/event/model_notifiable.rb",
@@ -47,7 +48,7 @@ Gem::Specification.new do |s|
   s.homepage = "https://github.com/tengine/tengine_event"
   s.licenses = ["MPL/LGPL"]
   s.require_paths = ["lib"]
-  s.rubygems_version = "1.8.10"
+  s.rubygems_version = "1.8.12"
   s.summary = "Tengine Event API to access the queue"
 
   if s.respond_to? :specification_version then
