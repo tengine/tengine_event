@@ -44,3 +44,8 @@ require 'yard'
 YARD::Rake::YardocTask.new
 
 require 'ci/reporter/rake/rspec'
+
+task :sucks do
+  fp = File.expand_path '../bin/tengine_event_sucks', __FILE__
+  load fp
+end

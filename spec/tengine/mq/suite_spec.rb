@@ -398,6 +398,7 @@ describe Tengine::Mq::Suite do
           # キューにイベントがたまるのでてきとうに吸い出す
           if @port
             EM.run do
+              subject.send :ensures, :connection do
               i = 0
               subject.subscribe do |hdr, bdy|
                 hdr.ack
@@ -412,6 +413,7 @@ describe Tengine::Mq::Suite do
                 else
                   i = 0
                 end
+              end
               end
             end
           end
@@ -633,6 +635,7 @@ describe Tengine::Mq::Suite do
         # キューにイベントがたまるのでてきとうに吸い出す
         if @port
           EM.run do
+            subject.send :ensures, :connection do
             i = 0
             subject.subscribe do |hdr, bdy|
               hdr.ack
@@ -641,6 +644,7 @@ describe Tengine::Mq::Suite do
             EM.add_periodic_timer(0.1) do
               subject.stop if i.zero?
               i = 0
+            end
             end
           end
         end
@@ -794,7 +798,7 @@ describe Tengine::Mq::Suite do
           # netstat -an は Linux / BSD ともに有効
           # どちらかに限ればもう少し効率的な探し方はある。たとえば Linux 限定でよければ netstat -lnt ...
           y = `netstat -an | fgrep LISTEN | fgrep #{port}`
-          if y.lines.to_a.size > 1
+          if y.lines.to_a.size >= 1
             @port = port
             return
           end
