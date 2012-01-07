@@ -533,7 +533,7 @@ describe Tengine::Mq::Suite do
               end
             end
             t1 = Time.now
-            (t1 - t0).should be_within(0.5).of(2.0)
+            (t1 - t0).should be_within(1.0).of(2.0)
           end
 
           it "ちょうどretry_count回めのリトライして成功の場合は例外にならない" do
