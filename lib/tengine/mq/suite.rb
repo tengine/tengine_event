@@ -1000,23 +1000,26 @@ you to use a relatively recent version of RabbitMQ.                   [BEWARE!]
     end
   end
 
+  def gencb
+    @gencb ||= lambda do |ev|
+      case @state when :unsupported, :established
+        fire_internal ev
+        @firing_queue.pop(&gencb)
+      else
+        # disconnectedとか。
+        # 無視?
+        @firing_queue.push ev
+      end
+    end
+  end
+
   def trigger_firing_thread
     # inside mutex
     # event already pushed
     ensures_handshake do
       ensures :exchange do
         synchronize do
-          cb = lambda do |ev|
-            case @state when :unsupported, :established
-              fire_internal ev
-              @firing_queue.pop(&cb)
-            else
-              # disconnectedとか。
-              # 無視?
-              @firing_queue.push ev
-            end
-          end
-          @firing_queue.pop(&cb)
+          @firing_queue.pop(&gencb)
         end
       end
     end
