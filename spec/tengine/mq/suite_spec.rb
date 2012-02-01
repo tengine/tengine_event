@@ -685,13 +685,16 @@ describe Tengine::Mq::Suite do
         if @port
           EM.run do
             i = 0
-            subject.subscribe do |hdr, bdy|
+            j = false
+            subject.subscribe :confirm=>proc{j = true} do |hdr, bdy|
               hdr.ack
               i += 1
             end
             EM.add_periodic_timer(0.1) do
-              subject.stop if i.zero?
-              i = 0
+              if j
+                subject.stop if i.zero?
+                i = 0
+              end
             end
           end
         end
