@@ -27,12 +27,14 @@ suite = Tengine::Mq::Suite.new hash
 # main loop
 EM.run do
   i = 0
-  suite.subscribe do |hdr, bdy|
+  j = false
+  suite.subscribe :confirm => proc{j = true} do |hdr, bdy|
     hdr.ack
     STDOUT.puts bdy
+    i += 1
   end
   timer = EM.add_periodic_timer 0.1 do
-    if i.zero?
+    if j and i.zero?
       EM.cancel_timer timer
       suite.unsubscribe do
         suite.stop
