@@ -20,7 +20,7 @@ Jeweler::Tasks.new do |gem|
   gem.summary = %Q{Tengine Event API to access the queue}
   gem.description = %Q{Tengine Event API to access the queue}
   gem.email = "tengine@nautilus-technologies.com"
-  gem.authors = %w[saishu w-irie taigou totty hiroshinakao g-morita guemon aoetk hattori-at-nt t-yamada y-karashima akm]
+  gem.authors = %w[taigou totty g-morita shyouhei akm]
   gem.bindir = 'bin'
   gem.executables = ['tengine_fire', 'tengine_event_sucks']
   # dependencies defined in Gemfile
