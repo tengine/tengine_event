@@ -16,7 +16,7 @@ Jeweler::Tasks.new do |gem|
   # gem is a Gem::Specification... see http://docs.rubygems.org/read/chapter/20 for more options
   gem.name = "tengine_event"
   gem.homepage = "https://github.com/tengine/tengine_event"
-  gem.license = "MPL/LGPL"
+  gem.license = "MPL2.0/LGPLv3"
   gem.summary = %Q{Tengine Event API to access the queue}
   gem.description = %Q{Tengine Event API to access the queue}
   gem.email = "tengine@nautilus-technologies.com"
