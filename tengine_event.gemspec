@@ -46,7 +46,7 @@ Gem::Specification.new do |s|
     "tengine_event.gemspec"
   ]
   s.homepage = "https://github.com/tengine/tengine_event"
-  s.licenses = ["MPL/LGPL"]
+  s.licenses = ["MPL2.0/LGPLv3"]
   s.require_paths = ["lib"]
   s.rubygems_version = "1.8.12"
   s.summary = "Tengine Event API to access the queue"
