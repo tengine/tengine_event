@@ -5,11 +5,11 @@
 
 Gem::Specification.new do |s|
   s.name = "tengine_event"
-  s.version = "0.4.6"
+  s.version = "0.4.7"
 
   s.required_rubygems_version = Gem::Requirement.new(">= 0") if s.respond_to? :required_rubygems_version=
   s.authors = ["taigou", "totty", "g-morita", "shyouhei", "akm"]
-  s.date = "2012-02-09"
+  s.date = "2012-02-14"
   s.description = "Tengine Event API to access the queue"
   s.email = "tengine@nautilus-technologies.com"
   s.executables = ["tengine_fire", "tengine_event_sucks"]
@@ -48,7 +48,7 @@ Gem::Specification.new do |s|
   s.homepage = "https://github.com/tengine/tengine_event"
   s.licenses = ["MPL2.0/LGPLv3"]
   s.require_paths = ["lib"]
-  s.rubygems_version = "1.8.12"
+  s.rubygems_version = "1.8.15"
   s.summary = "Tengine Event API to access the queue"
 
   if s.respond_to? :specification_version then
