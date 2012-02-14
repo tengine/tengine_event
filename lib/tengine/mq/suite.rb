@@ -970,10 +970,11 @@ you to use a relatively recent version of RabbitMQ.                   [BEWARE!]
     add_hook :'channel.after_recovery' do |ch|
       # AMAZING that an AMQP::Channel instance deletes a once-registered callbacks!
       # see: amq/client/async/channel.rb, search for "def reset_state!"
+      a = AMQ::Client::Async::Channel
       hooks_channel.inject(Hash.new) {|r, x|
         r.update x.intern => callback_entity(:channel, x.intern)
       }.each_pair {|k, v|
-        ch.send(k, &v)
+        a.instance_method(k).bind(ch).call(&v)
       }
 
       ch.prefetch @config[:channel][:prefetch] do
