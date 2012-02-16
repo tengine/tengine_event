@@ -336,7 +336,7 @@ class Tengine::Mq::Suite
     p0 = lambda do
       EM.cancel_timer @reconnection_timer if ivar? :reconnection_timer
       @retrying_events.each_value do |(idx, *)|
-        EM.stop_timer idx if idx
+        EM.cancel_timer idx if idx
       end
       @retrying_events.clear
       stop_firing_queue
@@ -899,7 +899,7 @@ you to use a relatively recent version of RabbitMQ.                   [BEWARE!]
       if @state != :disconnected
         @state = :disconnected
         @retrying_events.each_value do |(idx, *)|
-          EM.stop_timer idx if idx
+          EM.cancel_timer idx if idx
         end
         # all unacknowledged events are hereby considered LOST
         t0 = Time.at 0
