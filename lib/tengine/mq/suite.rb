@@ -336,7 +336,7 @@ class Tengine::Mq::Suite
     p0 = lambda do
       EM.cancel_timer @reconnection_timer if ivar? :reconnection_timer
       @retrying_events.each_value do |(idx, *)|
-        EM.stop_timer idx if idx
+        EM.cancel_timer idx if idx
       end
       @retrying_events.clear
       stop_firing_queue
@@ -899,7 +899,7 @@ you to use a relatively recent version of RabbitMQ.                   [BEWARE!]
       if @state != :disconnected
         @state = :disconnected
         @retrying_events.each_value do |(idx, *)|
-          EM.stop_timer idx if idx
+          EM.cancel_timer idx if idx
         end
         # all unacknowledged events are hereby considered LOST
         t0 = Time.at 0
@@ -970,10 +970,11 @@ you to use a relatively recent version of RabbitMQ.                   [BEWARE!]
     add_hook :'channel.after_recovery' do |ch|
       # AMAZING that an AMQP::Channel instance deletes a once-registered callbacks!
       # see: amq/client/async/channel.rb, search for "def reset_state!"
+      a = AMQ::Client::Async::Channel
       hooks_channel.inject(Hash.new) {|r, x|
         r.update x.intern => callback_entity(:channel, x.intern)
       }.each_pair {|k, v|
-        ch.send(k, &v)
+        a.instance_method(k).bind(ch).call(&v)
       }
 
       ch.prefetch @config[:channel][:prefetch] do
