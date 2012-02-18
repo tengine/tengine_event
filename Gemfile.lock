@@ -41,7 +41,7 @@ GEM
       simplecov-html (~> 0.5.3)
     simplecov-html (0.5.3)
     systemu (2.4.2)
-    tengine_support (0.3.24)
+    tengine_support (0.3.26)
       activesupport (>= 3.0.0)
     uuid (2.3.5)
       macaddr (~> 1.0)
