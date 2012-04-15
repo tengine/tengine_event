@@ -19,7 +19,7 @@ Jeweler::Tasks.new do |gem|
   gem.license = "MPL2.0/LGPLv3"
   gem.summary = %Q{Tengine Event API to access the queue}
   gem.description = %Q{Tengine Event API to access the queue}
-  gem.email = "tengine@nautilus-technologies.com"
+  gem.email = "tengine-info@groovenauts.jp"
   gem.authors = %w[taigou totty g-morita shyouhei akm]
   gem.bindir = 'bin'
   gem.executables = ['tengine_fire', 'tengine_event_sucks']

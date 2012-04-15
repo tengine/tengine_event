@@ -11,7 +11,7 @@ Gem::Specification.new do |s|
   s.authors = ["taigou", "totty", "g-morita", "shyouhei", "akm"]
   s.date = "2012-02-16"
   s.description = "Tengine Event API to access the queue"
-  s.email = "tengine@nautilus-technologies.com"
+  s.email = "tengine-info@groovenauts.jp"
   s.executables = ["tengine_fire", "tengine_event_sucks"]
   s.extra_rdoc_files = [
     "README.rdoc"
